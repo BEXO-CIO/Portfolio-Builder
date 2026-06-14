@@ -68,8 +68,13 @@ export const useAuthStore = create<AuthStore>()(
       verifyOtp: async (phone, code) => {
         set({ isLoading: true });
         await new Promise((r) => setTimeout(r, 900));
-        if (code === '0000') {
-          const userId = 'user-' + phone.replace(/\D/g, '').slice(-6);
+        const digits = phone.replace(/\D/g, '');
+        const isTestNumber = digits.endsWith('9999999999');
+        const testCodes = ['1234', '123456'];
+        const devCodes = ['0000'];
+        const valid = devCodes.includes(code) || (isTestNumber && testCodes.includes(code));
+        if (valid) {
+          const userId = 'user-' + digits.slice(-6);
           const session: BexoSession = {
             user: { id: userId, phone },
             access_token: 'mock_' + Date.now(),
@@ -78,7 +83,7 @@ export const useAuthStore = create<AuthStore>()(
           return { error: null };
         }
         set({ isLoading: false });
-        return { error: 'Incorrect code. Enter 0000 to continue.' };
+        return { error: 'Incorrect code. Use 0000 (any number) or 1234 / 123456 for +91 9999999999.' };
       },
 
       signOut: async () => {

@@ -21,7 +21,7 @@ export default function LoginScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { sendOtp, isLoading } = useAuthStore();
-  const [phone, setPhone] = useState('');
+  const [phone, setPhone] = useState('+91');
   const [error, setError] = useState('');
 
   const validate = () => {
