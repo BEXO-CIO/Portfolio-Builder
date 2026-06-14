@@ -1,0 +1,38 @@
+I'm rebuilding a mobile-first portfolio-builder app called Bexo. I've attached a complete specification file BEXO_BUILD_SPEC.md — read it fully before writing any code. It contains:
+
+
+Product purpose & target users
+Full tech stack (Expo + Expo Router + TypeScript + Zustand + Supabase)
+Complete design system (colors, typography, spacing, motion, haptics)
+Full Postgres/Supabase schema (ready to run)
+Every screen from splash to main app, in exact navigation order, with fields, validation rules, and next-step logic
+State management structure (3 Zustand stores)
+Services layer (resume AI parsing, avatar upload, update parsing)
+A recommended build order (Section 14)
+
+
+Please do the following:
+
+
+Scaffold a new Expo + Expo Router + TypeScript project matching the file structure in Section 5 of the spec.
+Set up Supabase: create the schema from Section 4 exactly as written (tables, indexes, triggers, RLS policies), and create avatars (public) and resumes (private) storage buckets.
+Implement the design system from Section 3 as a useColors hook + shared theme constants (no purple, no pure black/white — use the exact hex values given).
+Build the shared component library listed in Section 3.6 first (ScreenShell, ScreenHeader, OnboardingShell, BexoButton, FormField, OTPInput, SkillTag, etc.) — these are reused across nearly every screen.
+Implement the three Zustand stores from Section 6 (useAuthStore, useProfileStore, usePortfolioStore) with the exact fields/methods listed.
+Build screens in the order given in Section 14 / Section 8–11 — follow the navigation logic precisely, especially:
+
+The root router (app/index.tsx) resumability logic in Section 8.1
+The onboardingStep state machine values listed in Section 6.2
+The two onboarding paths (AI resume upload vs. manual entry) and where they re-converge at cards.tsx
+
+
+
+For the resume AI parsing (Section 12.1), stub it with mock JSON matching the ParsedResume type first so the UI flow works end-to-end — I'll wire the real OpenAI Edge Function afterward.
+For OTP/WhatsApp auth, stub /auth/send-otp and OTP verification with a mock provider for now (always succeed, fixed code 0000) so I can test the full flow — I'll swap in a real provider later.
+Implement the 90% profile-completeness gate exactly as weighted in Section 7, and make the "Generating" screen reflect REAL site_builds status via Supabase Realtime — no fake progress bars or timers.
+Flag anything in Section 15 ("Open Decisions") where you need me to make a call before proceeding — don't guess silently on those.
+
+
+Match the tone and visual language described: light, editorial, warm, calm — like a "patient editor helping you publish," not a generic purple SaaS dashboard. Follow the anti-references in Section 1 strictly.
+
+Start with steps 1–5 (scaffold, schema, design system, shared components, stores), show me the result, then continue with the screens in batches (auth flow → onboarding AI path → onboarding manual path → main tabs).
