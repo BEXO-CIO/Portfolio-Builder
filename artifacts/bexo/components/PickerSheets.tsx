@@ -155,6 +155,75 @@ export function MonthPickerSheet({ visible, selected, onSelect, onClose }: Month
   );
 }
 
+const DAYS = Array.from({ length: 31 }, (_, i) => String(i + 1));
+
+type DayProps = {
+  visible: boolean;
+  selected?: number;
+  onSelect: (day: number) => void;
+  onClose: () => void;
+};
+
+export function DayPickerSheet({ visible, selected, onSelect, onClose }: DayProps) {
+  const colors = useColors();
+  const insets = useSafeAreaInsets();
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <TouchableOpacity style={styles.backdrop} onPress={onClose} />
+      <View
+        style={[
+          styles.sheet,
+          {
+            backgroundColor: colors.surface,
+            paddingBottom: insets.bottom + 16,
+            borderTopLeftRadius: radius.xl,
+            borderTopRightRadius: radius.xl,
+          },
+        ]}
+      >
+        <View style={[styles.handle, { backgroundColor: colors.border }]} />
+        <View style={styles.sheetHeader}>
+          <Text style={[typography.h3, { color: colors.foreground }]}>Select Day</Text>
+          <TouchableOpacity onPress={onClose}>
+            <Feather name="x" size={20} color={colors.mutedForeground} />
+          </TouchableOpacity>
+        </View>
+        <FlatList
+          data={DAYS}
+          keyExtractor={(item) => item}
+          style={styles.list}
+          renderItem={({ item }) => {
+            const val = parseInt(item);
+            const isSelected = selected === val;
+            return (
+              <TouchableOpacity
+                style={[styles.item, { borderBottomColor: colors.border }]}
+                onPress={() => { onSelect(val); onClose(); }}
+              >
+                <Text
+                  style={[
+                    typography.bodyLg,
+                    {
+                      color: isSelected ? colors.primary : colors.foreground,
+                      fontFamily: isSelected ? 'DMSans_600SemiBold' : 'DMSans_400Regular',
+                    },
+                  ]}
+                >
+                  {item}
+                </Text>
+                {isSelected ? (
+                  <Feather name="check" size={16} color={colors.primary} />
+                ) : null}
+              </TouchableOpacity>
+            );
+          }}
+        />
+      </View>
+    </Modal>
+  );
+}
+
 const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(28,25,23,0.4)' },
   sheet: { maxHeight: '70%' },

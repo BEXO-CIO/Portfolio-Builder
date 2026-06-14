@@ -22,3 +22,26 @@ export async function uploadAvatar(
     return { url: null, error: err.message || 'Upload failed' };
   }
 }
+
+export async function uploadFile(
+  userId: string,
+  localUri: string,
+  folder: string = 'updates',
+  filename?: string
+): Promise<{ url: string | null; error: string | null }> {
+  try {
+    const response = await fetch(localUri);
+    const blob = await response.blob();
+    
+    const name = filename || `${Date.now()}`;
+    const fileRef = ref(storage, `users/${userId}/${folder}/${name}`);
+    
+    await uploadBytes(fileRef, blob, { contentType: blob.type || 'application/octet-stream' });
+    const downloadUrl = await getDownloadURL(fileRef);
+    
+    return { url: downloadUrl, error: null };
+  } catch (err: any) {
+    console.error('[UploadService] uploadFile failed:', err);
+    return { url: null, error: err.message || 'Upload failed' };
+  }
+}

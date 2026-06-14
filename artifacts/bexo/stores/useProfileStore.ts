@@ -144,6 +144,23 @@ export type Update = {
   title: string;
   description: string;
   created_at: string;
+  
+  // Media / Links
+  image_url?: string;
+  pdf_url?: string;
+  link_url?: string;
+
+  // Role specific
+  company_name?: string;
+  job_title?: string;
+  start_date?: string;
+  end_date?: string;
+  is_current?: boolean;
+
+  // Education specific
+  institution_name?: string;
+  specialization?: string;
+  percentage?: string;
 };
 
 type ProfileStore = {
@@ -229,6 +246,12 @@ export const useProfileStore = create<ProfileStore>()(
       startSync: (uid) => {
         const { stopSync } = get();
         stopSync(); // Clear existing
+
+        if (uid.startsWith('dev-')) {
+          // Dev mode users aren't authenticated with Firebase, so Firestore will reject.
+          return;
+        }
+
         const unsubs: Unsubscribe[] = [];
 
         // 1. Profile
@@ -250,7 +273,7 @@ export const useProfileStore = create<ProfileStore>()(
       },
 
       stopSync: () => {
-        get()._unsubs.forEach((u) => u());
+        get()._unsubs.forEach((u) => u?.());
         set({ _unsubs: [] });
       },
 
@@ -294,8 +317,16 @@ export const useProfileStore = create<ProfileStore>()(
       },
 
       checkHandle: async (handle) => {
-        const { profile } = get();
-        return await checkHandleAvailable(handle, profile?.user_id);
+        try {
+          const { profile } = get();
+          if (profile?.user_id?.startsWith('dev-')) {
+            return true; // Dev mode bypass
+          }
+          return await checkHandleAvailable(handle, profile?.user_id);
+        } catch (error) {
+          console.error('[ProfileStore] checkHandle error:', error);
+          return false;
+        }
       },
 
       setOnboardingStep: (onboardingStep) => set({ onboardingStep }),
@@ -498,6 +529,10 @@ export const useProfileStore = create<ProfileStore>()(
     {
       name: 'bexo-profile-v1',
       storage: createJSONStorage(() => AsyncStorage),
+      partialize: (state) => {
+        const { _unsubs, ...rest } = state;
+        return rest;
+      },
     }
   )
 );

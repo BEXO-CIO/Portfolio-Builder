@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 
 import { useColors } from '@/hooks/useColors';
 import { typography, radius } from '@/constants/theme';
@@ -17,37 +19,48 @@ const FAQS = [
 
 export default function FAQScreen() {
   const colors = useColors();
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const [expanded, setExpanded] = useState<number | null>(null);
 
   return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor: colors.background }}
-      contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 32 }]}
-    >
-      <Text style={[typography.h2, { color: colors.foreground, marginBottom: 20 }]}>FAQ</Text>
-      {FAQS.map((faq, i) => (
-        <TouchableOpacity
-          key={i}
-          style={[styles.item, { borderColor: colors.border, borderRadius: radius.md, backgroundColor: colors.surface }]}
-          onPress={() => setExpanded(expanded === i ? null : i)}
-          activeOpacity={0.85}
-        >
-          <View style={styles.row}>
-            <Text style={[typography.body, { flex: 1, color: colors.foreground, fontFamily: 'DMSans_600SemiBold' }]}>{faq.q}</Text>
-            <Feather name={expanded === i ? 'chevron-up' : 'chevron-down'} size={18} color={colors.mutedForeground} />
-          </View>
-          {expanded === i ? (
-            <Text style={[typography.body, { color: colors.mutedForeground, marginTop: 10, lineHeight: 22 }]}>{faq.a}</Text>
-          ) : null}
-        </TouchableOpacity>
-      ))}
-    </ScrollView>
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      <Animated.ScrollView
+        contentContainerStyle={[styles.scroll, { paddingTop: Math.max(insets.top, 20), paddingBottom: insets.bottom + 32 }]}
+      >
+        <Animated.View entering={FadeInDown.delay(0).springify()} style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} hitSlop={12} style={styles.backBtn}>
+            <Feather name="arrow-left" size={24} color={colors.foreground} />
+          </TouchableOpacity>
+          <Text style={[typography.h2, { color: colors.foreground }]}>FAQ</Text>
+        </Animated.View>
+
+        {FAQS.map((faq, i) => (
+          <Animated.View key={i} entering={FadeInDown.delay((i + 1) * 40).springify()}>
+            <TouchableOpacity
+              style={[styles.item, { borderColor: colors.border, borderRadius: radius.md, backgroundColor: colors.surface }]}
+              onPress={() => setExpanded(expanded === i ? null : i)}
+              activeOpacity={0.85}
+            >
+              <View style={styles.row}>
+                <Text style={[typography.body, { flex: 1, color: colors.foreground, fontFamily: 'DMSans_600SemiBold' }]}>{faq.q}</Text>
+                <Feather name={expanded === i ? 'chevron-up' : 'chevron-down'} size={18} color={colors.mutedForeground} />
+              </View>
+              {expanded === i ? (
+                <Text style={[typography.body, { color: colors.mutedForeground, marginTop: 10, lineHeight: 22 }]}>{faq.a}</Text>
+              ) : null}
+            </TouchableOpacity>
+          </Animated.View>
+        ))}
+      </Animated.ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   scroll: { padding: 20 },
+  header: { flexDirection: 'row', alignItems: 'center', marginBottom: 24, gap: 16 },
+  backBtn: { padding: 4 },
   item: { padding: 16, marginBottom: 10, borderWidth: 1.5 },
   row: { flexDirection: 'row', alignItems: 'center' },
 });

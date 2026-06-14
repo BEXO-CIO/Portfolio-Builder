@@ -16,10 +16,10 @@ const CONFIG: Record<
   NonNullable<BuildStatus>,
   { label: string; icon: keyof typeof Feather.glyphMap; color: string }
 > = {
-  queued: { label: 'Queued…', icon: 'clock', color: '#78716C' },
-  building: { label: 'Building your portfolio…', icon: 'loader', color: '#B45309' },
-  done: { label: 'Portfolio is live!', icon: 'check-circle', color: '#0D6B5C' },
-  failed: { label: 'Build failed', icon: 'alert-circle', color: '#B91C1C' },
+  QUEUED: { label: 'Queued…', icon: 'clock', color: '#78716C' },
+  BUILDING: { label: 'Building your portfolio…', icon: 'loader', color: '#B45309' },
+  DONE: { label: 'Portfolio is live!', icon: 'check-circle', color: '#0D6B5C' },
+  FAILED: { label: 'Build failed', icon: 'alert-circle', color: '#B91C1C' },
 };
 
 export function BuildStatusCard({ status, portfolioUrl, buildLog }: Props) {

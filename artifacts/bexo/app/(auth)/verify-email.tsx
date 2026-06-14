@@ -97,11 +97,9 @@ export default function VerifyEmailScreen() {
 
   // Google OAuth request
   const [request, response, promptAsync] = Google.useAuthRequest({
-    // TODO: Replace with real client IDs from Firebase Console →
-    // Authentication → Sign-in providers → Google → Web SDK configuration
-    clientId: '860803616355-REPLACE_WITH_WEB_CLIENT_ID.apps.googleusercontent.com',
-    iosClientId: '860803616355-REPLACE_WITH_IOS_CLIENT_ID.apps.googleusercontent.com',
-    androidClientId: '860803616355-REPLACE_WITH_ANDROID_CLIENT_ID.apps.googleusercontent.com',
+    clientId: '860803616355-fr9uc2gp3em7n9c99gqoccp2homoj09l.apps.googleusercontent.com',
+    iosClientId: '860803616355-fr9uc2gp3em7n9c99gqoccp2homoj09l.apps.googleusercontent.com',
+    androidClientId: '860803616355-fr9uc2gp3em7n9c99gqoccp2homoj09l.apps.googleusercontent.com',
     redirectUri: makeRedirectUri({ scheme: 'com.mybexo.app' }),
   });
 

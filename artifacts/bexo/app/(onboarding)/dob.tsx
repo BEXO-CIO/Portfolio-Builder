@@ -9,36 +9,48 @@ import { useProfileStore } from '@/stores/useProfileStore';
 import { OnboardingShell } from '@/components/OnboardingShell';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { BexoButton } from '@/components/BexoButton';
-import { YearPickerSheet, MonthPickerSheet } from '@/components/PickerSheets';
+import { YearPickerSheet, MonthPickerSheet, DayPickerSheet } from '@/components/PickerSheets';
 
 export default function DobStep() {
   const colors = useColors();
   const router = useRouter();
   const { updateProfile, setOnboardingStep } = useProfileStore();
+  const [day, setDay] = useState<number | null>(null);
   const [month, setMonth] = useState('');
   const [year, setYear] = useState<number | null>(null);
+  const [showDay, setShowDay] = useState(false);
   const [showMonth, setShowMonth] = useState(false);
   const [showYear, setShowYear] = useState(false);
 
   const handleNext = () => {
-    if (month && year) {
+    if (day && month && year) {
       const monthIndex = [
         'January','February','March','April','May','June',
         'July','August','September','October','November','December',
       ].indexOf(month) + 1;
-      const dobStr = `${year}-${String(monthIndex).padStart(2, '0')}-01`;
+      const dobStr = `${year}-${String(monthIndex).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
       updateProfile({ dob: dobStr });
     }
     setOnboardingStep('theme');
     router.push('/(onboarding)/theme');
   };
 
-  const filled = !!month && !!year;
+  const filled = !!day && !!month && !!year;
 
   return (
     <OnboardingShell step="dob" onBack={() => router.back()}>
       <ScrollView showsVerticalScrollIndicator={false}>
         <ScreenHeader title="Date of birth" subtitle="Used to personalise your experience. Only the year appears publicly." />
+
+        <TouchableOpacity
+          style={[styles.picker, { borderColor: colors.border, borderRadius: radius.sm, backgroundColor: colors.surface }]}
+          onPress={() => setShowDay(true)}
+        >
+          <Text style={[typography.bodyLg, { color: day ? colors.foreground : colors.mutedForeground }]}>
+            {day ? String(day) : 'Day'}
+          </Text>
+          <Feather name="chevron-down" size={18} color={colors.mutedForeground} />
+        </TouchableOpacity>
 
         <TouchableOpacity
           style={[styles.picker, { borderColor: colors.border, borderRadius: radius.sm, backgroundColor: colors.surface }]}
@@ -67,6 +79,7 @@ export default function DobStep() {
           ) : null}
         </View>
 
+        <DayPickerSheet visible={showDay} selected={day ?? undefined} onSelect={setDay} onClose={() => setShowDay(false)} />
         <MonthPickerSheet visible={showMonth} selected={month} onSelect={setMonth} onClose={() => setShowMonth(false)} />
         <YearPickerSheet visible={showYear} selected={year ?? undefined} onSelect={setYear} onClose={() => setShowYear(false)} />
       </ScrollView>

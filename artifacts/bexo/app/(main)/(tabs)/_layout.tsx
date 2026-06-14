@@ -3,12 +3,14 @@ import * as Haptics from 'expo-haptics';
 import { Tabs } from 'expo-router';
 import React, { useEffect } from 'react';
 import { Platform, StyleSheet, TouchableOpacity, View, Text } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring, interpolateColor, useDerivedValue } from 'react-native-reanimated';
+import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withSpring, interpolateColor, useDerivedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 
 import { useColors } from '@/hooks/useColors';
 import { typography } from '@/constants/theme';
+
+import { BlurView } from 'expo-blur';
 
 function TabIcon({ name, focused, color }: { name: any, focused: boolean, color: string }) {
   const scale = useSharedValue(focused ? 1.1 : 1);
@@ -29,7 +31,11 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   
   return (
     <View style={[styles.tabBarContainer, { paddingBottom: insets.bottom + (Platform.OS === 'ios' ? 0 : 16) }]}>
-      <View style={[styles.tabBar, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+      <BlurView
+        intensity={80}
+        tint={colors.isDark ? 'dark' : 'light'}
+        style={[styles.tabBar, { backgroundColor: colors.isDark ? 'rgba(26,26,31,0.6)' : 'rgba(255,255,255,0.7)', borderColor: colors.border }]}
+      >
         {state.routes.map((route, index) => {
           const { options } = descriptors[route.key];
           const isFocused = state.index === index;
@@ -59,7 +65,7 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
               <View style={[styles.iconWrapper, isFocused && { backgroundColor: colors.primary + '15' }]}>
                 <TabIcon name={iconName} focused={isFocused} color={isFocused ? colors.primary : colors.mutedForeground} />
                 {isFocused && (
-                  <Animated.Text entering={Animated.FadeIn.duration(200)} style={[styles.tabLabel, { color: colors.primary }]}>
+                  <Animated.Text entering={FadeIn.duration(200)} style={[styles.tabLabel, { color: colors.primary }]}>
                     {options.title}
                   </Animated.Text>
                 )}
@@ -67,7 +73,7 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
             </TouchableOpacity>
           );
         })}
-      </View>
+      </BlurView>
     </View>
   );
 }
@@ -109,6 +115,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 16,
     elevation: 8,
+    overflow: 'hidden',
   },
   tabItem: {
     flex: 1,

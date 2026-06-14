@@ -13,36 +13,14 @@
 import {
   ApplicationVerifier,
   PhoneAuthProvider,
-  RecaptchaVerifier,
   signInWithCredential,
   signInWithPhoneNumber,
   UserCredential,
 } from 'firebase/auth';
 import { auth } from './firebase';
 
-// ---------------------------------------------------------------------------
-// RecaptchaVerifier singleton (invisible reCAPTCHA for phone auth on web/Expo)
-// We lazy-initialise so it only runs when sendPhoneOtp is first called.
-// ---------------------------------------------------------------------------
-let _recaptchaVerifier: RecaptchaVerifier | null = null;
-
-function getRecaptchaVerifier(): ApplicationVerifier {
-  if (!_recaptchaVerifier) {
-    // 'invisible' reCAPTCHA — user sees no challenge under normal conditions
-    _recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-      size: 'invisible',
-    });
-  }
-  return _recaptchaVerifier;
-}
-
-/**
- * Clears the cached RecaptchaVerifier (call after a failed OTP send so a
- * fresh verifier is created on the next attempt).
- */
 export function resetRecaptcha() {
-  _recaptchaVerifier?.clear();
-  _recaptchaVerifier = null;
+  // No-op for Expo verifier since it manages its own state
 }
 
 /**
@@ -50,15 +28,18 @@ export function resetRecaptcha() {
  * Returns the verificationId that must be passed to confirmPhoneOtp.
  */
 export async function sendPhoneOtp(
-  phoneNumber: string
+  phoneNumber: string,
+  verifier: ApplicationVerifier
 ): Promise<{ verificationId: string | null; error: string | null }> {
   try {
-    const verifier = getRecaptchaVerifier();
-    const confirmationResult = await signInWithPhoneNumber(auth, phoneNumber, verifier);
-    return { verificationId: confirmationResult.verificationId, error: null };
+    if (!verifier) {
+      console.warn('[AuthService] No verifier provided to sendPhoneOtp. Falling back to dev mode.');
+      return { verificationId: null, error: null };
+    }
+    const phoneProvider = new PhoneAuthProvider(auth);
+    const verificationId = await phoneProvider.verifyPhoneNumber(phoneNumber, verifier);
+    return { verificationId, error: null };
   } catch (err: any) {
-    // Reset so the verifier can be recreated on retry
-    resetRecaptcha();
     console.error('[AuthService] sendPhoneOtp error:', err.code, err.message);
     return { verificationId: null, error: mapAuthError(err.code) };
   }

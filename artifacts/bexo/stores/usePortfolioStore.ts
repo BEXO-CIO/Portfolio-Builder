@@ -62,6 +62,17 @@ export const usePortfolioStore = create<PortfolioStore>()(
       },
 
       triggerBuild: async (uid) => {
+        if (uid.startsWith('dev-')) {
+          set({ buildStatus: 'QUEUED', buildStartedAt: Date.now(), buildLog: 'Mock build started...' });
+          setTimeout(() => {
+            set({ buildStatus: 'BUILDING', buildLog: 'Compiling components...' });
+          }, 1000);
+          setTimeout(() => {
+            set({ buildStatus: 'DONE', buildLog: 'Mock build complete!', portfolioUrl: `https://${uid}.mybexo.com` });
+          }, 3000);
+          return;
+        }
+
         // Optimistic update
         set({ buildStatus: 'QUEUED', buildStartedAt: Date.now(), buildLog: 'Build requested...' });
         

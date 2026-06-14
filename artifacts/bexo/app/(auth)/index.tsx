@@ -14,11 +14,13 @@ import {
 } from 'react-native';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { FirebaseRecaptchaVerifierModal } from 'expo-firebase-recaptcha';
 
 import { useColors } from '@/hooks/useColors';
 import { typography, radius, shadow } from '@/constants/theme';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { BexoButton } from '@/components/BexoButton';
+import app from '@/services/firebase';
 
 function formatPhone(raw: string): string {
   const digits = raw.replace(/\D/g, '').slice(0, 10);
@@ -35,6 +37,7 @@ export default function LoginScreen() {
   const [focused, setFocused] = useState(false);
   const [error, setError] = useState('');
   const inputRef = useRef<TextInput>(null);
+  const recaptchaVerifier = useRef(null);
 
   const displayValue = formatPhone(rawDigits);
   const fullPhone = '+91' + rawDigits;
@@ -51,13 +54,18 @@ export default function LoginScreen() {
       setError('Enter a valid 10-digit mobile number');
       return;
     }
-    const { error: err } = await sendOtp(fullPhone);
+    const { error: err } = await sendOtp(fullPhone, recaptchaVerifier.current);
     if (err) { setError(err); return; }
     router.push('/(auth)/verify');
   };
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
+      <FirebaseRecaptchaVerifierModal
+        ref={recaptchaVerifier}
+        firebaseConfig={app.options}
+        attemptInvisibleVerification
+      />
       {/* Hero gradient top section */}
       <LinearGradient
         colors={colors.gradientHero}

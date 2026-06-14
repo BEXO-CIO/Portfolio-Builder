@@ -64,7 +64,7 @@ export default function HandleStep() {
           autoCorrect={false}
           autoFocus
           error={error}
-          hint={`mybexo.com/${handle || 'yourname'}`}
+          hint={`${handle || 'yourname'}.mybexo.com`}
         />
         {statusText ? (
           <View style={styles.statusRow}>

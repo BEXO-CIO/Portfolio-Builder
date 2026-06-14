@@ -55,7 +55,7 @@ type AuthStore = {
   setHasSeenWalkthrough: (v: boolean) => void;
 
   // ── Step 1: Phone OTP ──────────────────────────────────────────────────────
-  sendOtp: (phone: string) => Promise<{ error: string | null }>;
+  sendOtp: (phone: string, verifier: any) => Promise<{ error: string | null }>;
   verifyOtp: (phone: string, code: string) => Promise<{ error: string | null }>;
 
   // ── Step 2: Google OAuth (link to phone-auth user) ─────────────────────────
@@ -90,13 +90,18 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       // ── STEP 1A: Send SMS OTP ───────────────────────────────────────────────
-      sendOtp: async (phone) => {
+      sendOtp: async (phone, verifier) => {
         set({ isLoading: true, phoneNumber: phone });
-        const { verificationId, error } = await sendPhoneOtp(phone);
-        if (error || !verificationId) {
+        const { verificationId, error } = await sendPhoneOtp(phone, verifier);
+        if (error) {
           set({ isLoading: false });
-          return { error: error ?? 'Failed to send OTP. Please try again.' };
+          return { error };
         }
+        if (!verificationId && !__DEV__) {
+          set({ isLoading: false });
+          return { error: 'Failed to send OTP. Please try again.' };
+        }
+        // In DEV mode, verificationId might be null which is fine, we just fall back
         set({ isLoading: false, otpSentAt: Date.now(), _verificationId: verificationId });
         return { error: null };
       },
@@ -112,8 +117,8 @@ export const useAuthStore = create<AuthStore>()(
           const phone = get().phoneNumber;
           const digits = phone.replace(/\D/g, '');
           const valid =
-            code === '0000' ||
-            (digits.endsWith('9999999999') && (code === '1234' || code === '123456'));
+            code === '000000' ||
+            (digits.endsWith('9999999999') && (code === '001234' || code === '123456'));
 
           if (!valid) {
             set({ isLoading: false });
@@ -209,25 +214,24 @@ export const useAuthStore = create<AuthStore>()(
               email = result.user.email;
               displayName = result.user.displayName;
               photoURL = result.user.photoURL;
-            } catch (linkErr: any) {
-              if (linkErr.code === 'auth/credential-already-in-use') {
-                // Google account already tied to a different Firebase user.
-                // Sign in with Google as a fallback (rare edge case).
-                const result = await signInWithCredential(auth, googleCredential);
-                uid = result.user.uid;
-                email = result.user.email;
-                displayName = result.user.displayName;
-                photoURL = result.user.photoURL;
-              } else {
-                throw linkErr;
+            } catch (err: any) {
+              if (err.code === 'auth/credential-already-in-use') {
+                return { error: 'This Google account is already linked to another Bexo profile.' };
               }
+              return { error: mapAuthError(err.code) };
             }
           } else {
-            // DEV mode: no real Firebase user, just store the google info
-            uid = currentSession?.user.id ?? 'dev-google';
-            email = null;
-            displayName = null;
-            photoURL = null;
+            // No real Firebase user (e.g. used DEV phone auth bypass).
+            // Let's sign them in directly with Google to create a REAL Firebase account!
+            try {
+              const result = await signInWithCredential(auth, googleCredential);
+              uid = result.user.uid;
+              email = result.user.email;
+              displayName = result.user.displayName;
+              photoURL = result.user.photoURL;
+            } catch (err: any) {
+              return { error: mapAuthError(err.code) };
+            }
           }
 
           const updatedSession: BexoSession = {
@@ -273,8 +277,14 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       _syncUser: (user) => {
-        if (!user) { set({ session: null }); return; }
         const prev = get().session;
+        if (!user) {
+          // If we have a DEV session, don't wipe it just because Firebase is empty
+          if (prev?.user.id.startsWith('dev-')) return;
+          // Otherwise, Firebase says we're logged out
+          set({ session: null });
+          return;
+        }
         if (!prev) return; // Don't create a session from listener alone — needs explicit flow
         // Update the session with latest Firebase user data
         set({

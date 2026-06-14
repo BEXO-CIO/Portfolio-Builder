@@ -21,14 +21,14 @@ export default function GeneratingScreen() {
   const completeness = getCompleteness();
 
   useEffect(() => {
-    if (!triggered.current && completeness >= 90 && buildStatus !== 'done' && buildStatus !== 'building') {
+    if (!triggered.current && completeness >= 90 && buildStatus !== 'DONE' && buildStatus !== 'BUILDING') {
       triggered.current = true;
-      triggerBuild(profile?.handle ?? 'user');
+      triggerBuild(profile?.user_id ?? 'user');
     }
   }, []);
 
   useEffect(() => {
-    if (buildStatus === 'done') {
+    if (buildStatus === 'DONE') {
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       updateProfile({ is_published: true });
       setOnboardingStep('completed');
@@ -46,18 +46,18 @@ export default function GeneratingScreen() {
         <ProgressRing percent={completeness} size={96} strokeWidth={6} />
         <Animated.View entering={FadeInDown.delay(80).springify()} style={styles.textBlock}>
           <Text style={[typography.h2, { color: colors.foreground, textAlign: 'center', letterSpacing: -0.3 }]}>
-            {buildStatus === 'done'
+            {buildStatus === 'DONE'
               ? 'Your portfolio is live!'
-              : buildStatus === 'failed'
+              : buildStatus === 'FAILED'
               ? 'Something went wrong'
               : isReady
               ? 'Building your portfolio…'
               : 'Almost there'}
           </Text>
           <Text style={[typography.body, { color: colors.mutedForeground, textAlign: 'center', marginTop: 10 }]}>
-            {buildStatus === 'done'
+            {buildStatus === 'DONE'
               ? `Visit ${portfolioUrl}`
-              : buildStatus === 'failed'
+              : buildStatus === 'FAILED'
               ? 'Please try again in a moment.'
               : isReady
               ? 'Compiling your content and applying your theme.'
@@ -71,10 +71,10 @@ export default function GeneratingScreen() {
           </Animated.View>
         ) : null}
 
-        {buildStatus === 'failed' ? (
+        {buildStatus === 'FAILED' ? (
           <BexoButton
             label="Try again"
-            onPress={() => { triggered.current = false; triggerBuild(profile?.handle ?? 'user'); }}
+            onPress={() => { triggered.current = false; triggerBuild(profile?.user_id ?? 'user'); }}
           />
         ) : null}
 

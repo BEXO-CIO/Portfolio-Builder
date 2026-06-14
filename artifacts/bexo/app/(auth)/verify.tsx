@@ -127,7 +127,7 @@ function OTPInput({
       setFocusedIndex(index + 1);
     }
     const full = next.join('');
-    if (full.length === CODE_LENGTH && !full.includes('')) onComplete(full);
+    if (full.length === CODE_LENGTH && !next.includes('')) onComplete(full);
   };
 
   const handleKeyPress = (e: { nativeEvent: { key: string } }, index: number) => {

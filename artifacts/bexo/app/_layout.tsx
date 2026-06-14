@@ -67,19 +67,19 @@ export default function RootLayout() {
                 <Stack.Screen name="(tabs)" />
                 <Stack.Screen
                   name="edit-profile"
-                  options={{ headerShown: true, title: 'Edit Profile', presentation: 'modal' }}
+                  options={{ headerShown: false, presentation: 'modal' }}
                 />
                 <Stack.Screen
                   name="settings"
-                  options={{ headerShown: true, title: 'Settings', presentation: 'modal' }}
+                  options={{ headerShown: false, presentation: 'modal' }}
                 />
                 <Stack.Screen
                   name="details"
                   options={{ headerShown: true, title: 'Details' }}
                 />
-                <Stack.Screen name="faq" options={{ headerShown: true, title: 'FAQ' }} />
-                <Stack.Screen name="privacy" options={{ headerShown: true, title: 'Privacy Policy' }} />
-                <Stack.Screen name="terms" options={{ headerShown: true, title: 'Terms of Service' }} />
+                <Stack.Screen name="faq" options={{ headerShown: false }} />
+                <Stack.Screen name="privacy" options={{ headerShown: false }} />
+                <Stack.Screen name="terms" options={{ headerShown: false }} />
                 <Stack.Screen name="+not-found" />
               </Stack>
             </KeyboardProvider>

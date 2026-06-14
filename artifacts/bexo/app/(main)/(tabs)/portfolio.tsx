@@ -1,7 +1,7 @@
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React from 'react';
-import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View, RefreshControl } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -23,11 +23,28 @@ export default function PortfolioScreen() {
   const completeness = getCompleteness();
   const topPad = Platform.OS === 'web' ? 67 : insets.top + 12;
 
+  const [refreshing, setRefreshing] = React.useState(false);
+  const onRefresh = React.useCallback(() => {
+    setRefreshing(true);
+    if (profile?.user_id) {
+      useProfileStore.getState().startSync(profile.user_id);
+    }
+    setTimeout(() => setRefreshing(false), 1500);
+  }, [profile?.user_id]);
+
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: colors.background }}
       contentContainerStyle={[styles.scroll, { paddingTop: topPad, paddingBottom: insets.bottom + 100 }]}
       showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          tintColor={colors.primary}
+          progressViewOffset={topPad}
+        />
+      }
     >
       <Animated.View entering={FadeInDown.delay(0).springify()} style={styles.header}>
         <Text style={[typography.h2, { color: colors.foreground, letterSpacing: -0.4 }]}>Portfolio</Text>
