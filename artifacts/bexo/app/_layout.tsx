@@ -19,6 +19,10 @@ import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+// Initialise Firebase + attach onAuthStateChanged session listener early.
+// This import is a deliberate side-effect — do not remove or tree-shake.
+import '@/services/firebase';
+import '@/stores/useAuthStore';
 
 SplashScreen.preventAutoHideAsync();
 

@@ -79,7 +79,7 @@ export default function PortfolioScreen() {
           <EmptyState icon="briefcase" title="No experience yet" actionLabel="Add experience" onAction={() => router.push('/edit-profile')} />
         ) : (
           experiences.map((e) => (
-            <ListRow key={e.id} title={e.role} subtitle={`${e.company} · ${e.start_date.slice(0, 4)}${e.is_current ? '–Present' : ''}`} chevron />
+            <Card key={e.id} icon="briefcase" title={e.role} subtitle={e.company} meta={`${e.start_date.slice(0, 4)}${e.is_current ? '–Present' : ''}`} onPress={() => router.push('/edit-profile')} />
           ))
         )}
       </Section>
@@ -89,7 +89,7 @@ export default function PortfolioScreen() {
           <EmptyState icon="book" title="No education yet" actionLabel="Add education" onAction={() => router.push('/edit-profile')} />
         ) : (
           education.map((e) => (
-            <ListRow key={e.id} title={`${e.degree} — ${e.institution}`} subtitle={`${e.field} · ${e.start_year}–${e.end_year ?? 'Present'}`} chevron />
+            <Card key={e.id} icon="book-open" title={e.degree} subtitle={e.institution} meta={`${e.start_year}–${e.end_year ?? 'Present'}`} onPress={() => router.push('/edit-profile')} />
           ))
         )}
       </Section>
@@ -99,7 +99,7 @@ export default function PortfolioScreen() {
           <EmptyState icon="code" title="No projects yet" actionLabel="Add project" onAction={() => router.push('/edit-profile')} />
         ) : (
           projects.map((p) => (
-            <ListRow key={p.id} title={p.title} subtitle={p.tech_stack.join(', ')} chevron />
+            <Card key={p.id} icon="terminal" title={p.title} subtitle={p.tech_stack.join(', ')} onPress={() => router.push('/edit-profile')} />
           ))
         )}
       </Section>
@@ -129,13 +129,33 @@ function Section({ title, children, delay, onAdd }: { title: string; children: R
           {title.toUpperCase()}
         </Text>
         {onAdd ? (
-          <TouchableOpacity onPress={onAdd} hitSlop={12}>
-            <Feather name="plus" size={18} color={colors.primary} />
+          <TouchableOpacity onPress={onAdd} hitSlop={12} style={[styles.addBtn, { backgroundColor: colors.primary + '15' }]}>
+            <Feather name="plus" size={16} color={colors.primary} />
           </TouchableOpacity>
         ) : null}
       </View>
       {children}
     </Animated.View>
+  );
+}
+
+function Card({ icon, title, subtitle, meta, onPress }: { icon: keyof typeof Feather.glyphMap, title: string, subtitle: string, meta?: string, onPress: () => void }) {
+  const colors = useColors();
+  return (
+    <TouchableOpacity onPress={onPress} activeOpacity={0.8} style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+      <View style={[styles.cardIcon, { backgroundColor: colors.primary + '15' }]}>
+        <Feather name={icon} size={20} color={colors.primary} />
+      </View>
+      <View style={styles.cardContent}>
+        <Text style={[typography.body, { color: colors.foreground, fontFamily: 'DMSans_600SemiBold' }]}>{title}</Text>
+        <Text style={[typography.bodySm, { color: colors.mutedForeground, marginTop: 2 }]}>{subtitle}</Text>
+      </View>
+      {meta ? (
+        <Text style={[typography.caption, { color: colors.mutedForeground }]}>{meta}</Text>
+      ) : (
+        <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+      )}
+    </TouchableOpacity>
   );
 }
 
@@ -148,7 +168,32 @@ const styles = StyleSheet.create({
   urlText: { flex: 1 },
   buildBtn: { paddingHorizontal: 12, paddingVertical: 8 },
   section: { marginBottom: 28 },
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  addBtn: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { paddingHorizontal: 12, paddingVertical: 6 },
+  card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderWidth: 1,
+    borderRadius: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  cardIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
+  },
+  cardContent: {
+    flex: 1,
+  },
 });

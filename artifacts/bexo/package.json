@@ -58,6 +58,12 @@
   "dependencies": {
     "@expo-google-fonts/dm-sans": "^0.4.2",
     "@expo-google-fonts/jetbrains-mono": "^0.4.1",
+    "@firebase/app": "^0.10.18",
+    "@firebase/auth": "^1.9.2",
+    "@firebase/firestore": "^4.7.15",
+    "@firebase/storage": "^0.13.6",
+    "expo-auth-session": "~6.0.3",
+    "expo-crypto": "~14.0.2",
     "expo-document-picker": "^14.0.8",
     "expo-image-manipulator": "^14.0.8",
     "zustand": "^5.0.14"

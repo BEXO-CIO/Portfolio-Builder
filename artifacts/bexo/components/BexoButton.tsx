@@ -18,7 +18,7 @@ import Animated, {
 import { useColors } from '@/hooks/useColors';
 import { typography, radius } from '@/constants/theme';
 
-type Variant = 'primary' | 'secondary' | 'ghost' | 'destructive';
+type Variant = 'primary' | 'secondary' | 'ghost' | 'destructive' | 'google';
 
 type Props = {
   label: string;
@@ -58,10 +58,10 @@ export function BexoButton({
   };
 
   const handlePressIn = () => {
-    scale.value = withSpring(0.98, { stiffness: 300, damping: 20 });
+    scale.value = withSpring(0.95, { stiffness: 400, damping: 25 });
   };
   const handlePressOut = () => {
-    scale.value = withSpring(1, { stiffness: 300, damping: 20 });
+    scale.value = withSpring(1, { stiffness: 400, damping: 25 });
   };
 
   const isDisabled = disabled || loading;
@@ -73,6 +73,7 @@ export function BexoButton({
       case 'secondary': return colors.surface;
       case 'ghost': return 'transparent';
       case 'destructive': return colors.destructive;
+      case 'google': return '#FFFFFF';
     }
   };
 
@@ -83,10 +84,11 @@ export function BexoButton({
       case 'secondary': return colors.foreground;
       case 'ghost': return colors.primary;
       case 'destructive': return colors.destructiveForeground;
+      case 'google': return '#1C1917';
     }
   };
 
-  const borderColor = variant === 'secondary' ? colors.border : 'transparent';
+  const borderColor = variant === 'secondary' || variant === 'google' ? colors.border : 'transparent';
 
   return (
     <AnimatedTouchable
@@ -111,7 +113,11 @@ export function BexoButton({
         <ActivityIndicator color={textColor()} size="small" />
       ) : (
         <View style={styles.row}>
-          {icon ? (
+          {variant === 'google' ? (
+            <View style={styles.googleGContainer}>
+              <Text style={styles.googleG}>G</Text>
+            </View>
+          ) : icon ? (
             <Feather name={icon} size={18} color={textColor()} style={styles.iconLeft} />
           ) : null}
           <Text style={[typography.bodyLg, styles.label, { color: textColor() }]}>
@@ -137,4 +143,18 @@ const styles = StyleSheet.create({
   label: { fontFamily: 'DMSans_600SemiBold' },
   iconLeft: { marginRight: 8 },
   iconRight: { marginLeft: 8 },
+  googleGContainer: {
+    marginRight: 10,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#F3F4F6', // light gray
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  googleG: {
+    fontFamily: 'DMSans_700Bold',
+    fontSize: 14,
+    color: '#4285F4',
+  },
 });

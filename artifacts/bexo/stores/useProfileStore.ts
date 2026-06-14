@@ -1,6 +1,19 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
+import type { Unsubscribe, DocumentData } from '@firebase/firestore';
+
+import {
+  upsertUser,
+  updateUserFields,
+  checkHandleAvailable,
+  addSubItem,
+  updateSubItem,
+  deleteSubItem,
+  bulkWriteSubCollection,
+  subscribeToProfile,
+  subscribeToSubCollection,
+} from '@/services/firestoreService';
 
 export type OnboardingStep =
   | 'email'
@@ -125,6 +138,14 @@ function defaultProfile(userId: string, phone: string): Profile {
   };
 }
 
+export type Update = {
+  id: string;
+  type: 'project' | 'achievement' | 'role' | 'education';
+  title: string;
+  description: string;
+  created_at: string;
+};
+
 type ProfileStore = {
   profile: Profile | null;
   education: Education[];
@@ -132,10 +153,13 @@ type ProfileStore = {
   projects: Project[];
   skills: Skill[];
   research: Research[];
+  updates: Update[];
   isLoading: boolean;
   onboardingStep: OnboardingStep;
   manualReviewStepIndex: number;
   parsedResumeData: ParsedResume | null;
+
+  _unsubs: Unsubscribe[];
 
   initProfile: (userId: string, phone: string) => void;
   updateProfile: (partial: Partial<Profile>) => void;
@@ -146,6 +170,9 @@ type ProfileStore = {
   applyParsedResume: (data: ParsedResume) => void;
   isOnboardingGateComplete: () => boolean;
   getCompleteness: () => number;
+
+  startSync: (uid: string) => void;
+  stopSync: () => void;
 
   addEducation: (e: Omit<Education, 'id'>) => void;
   updateEducation: (id: string, e: Partial<Education>) => void;
@@ -165,8 +192,12 @@ type ProfileStore = {
   addResearch: (r: Omit<Research, 'id'>) => void;
   removeResearch: (id: string) => void;
 
+  addUpdate: (u: Omit<Update, 'id' | 'created_at'>) => void;
+  removeUpdate: (id: string) => void;
+
   reset: () => void;
 };
+
 
 const COMPLETENESS_WEIGHTS = {
   identity: 15,   // full_name + handle + avatar_url
@@ -188,15 +219,52 @@ export const useProfileStore = create<ProfileStore>()(
       projects: [],
       skills: [],
       research: [],
+      updates: [],
       isLoading: false,
       onboardingStep: 'email',
       manualReviewStepIndex: 0,
       parsedResumeData: null,
+      _unsubs: [],
+
+      startSync: (uid) => {
+        const { stopSync } = get();
+        stopSync(); // Clear existing
+        const unsubs: Unsubscribe[] = [];
+
+        // 1. Profile
+        unsubs.push(subscribeToProfile(uid, (data) => {
+          if (data) {
+            set((s) => ({ profile: { ...s.profile, ...(data as any), user_id: uid } }));
+          }
+        }));
+
+        // 2. Sub-collections
+        unsubs.push(subscribeToSubCollection(uid, 'education', (docs) => set({ education: docs as Education[] })));
+        unsubs.push(subscribeToSubCollection(uid, 'experiences', (docs) => set({ experiences: docs as Experience[] })));
+        unsubs.push(subscribeToSubCollection(uid, 'projects', (docs) => set({ projects: docs as Project[] })));
+        unsubs.push(subscribeToSubCollection(uid, 'skills', (docs) => set({ skills: docs as Skill[] })));
+        unsubs.push(subscribeToSubCollection(uid, 'research', (docs) => set({ research: docs as Research[] })));
+        unsubs.push(subscribeToSubCollection(uid, 'updates', (docs) => set({ updates: docs as Update[] })));
+
+        set({ _unsubs: unsubs });
+      },
+
+      stopSync: () => {
+        get()._unsubs.forEach((u) => u());
+        set({ _unsubs: [] });
+      },
 
       initProfile: (userId, phone) => {
         const { profile } = get();
         if (!profile || profile.user_id !== userId) {
-          set({ profile: defaultProfile(userId, phone) });
+          const newProfile = defaultProfile(userId, phone);
+          set({ profile: newProfile });
+
+          upsertUser(userId, {
+            uid: userId,
+            phone,
+            full_name: newProfile.full_name || '',
+          }).catch((err) => console.warn('[ProfileStore] upsertUser failed:', err));
         }
       },
 
@@ -204,15 +272,30 @@ export const useProfileStore = create<ProfileStore>()(
         set((s) => ({
           profile: s.profile ? { ...s.profile, ...partial } : null,
         }));
+
+        const { profile } = get();
+        if (profile?.user_id) {
+          const syncFields: Record<string, any> = {};
+          const allowedKeys = [
+            'full_name', 'handle', 'headline', 'bio', 'avatar_url',
+            'location', 'website', 'linkedin_url', 'github_url',
+            'email', 'is_published', 'portfolio_theme', 'portfolio_font',
+            'email_verified',
+          ] as const;
+          for (const key of allowedKeys) {
+            if (key in partial) syncFields[key] = (partial as any)[key];
+          }
+          if (Object.keys(syncFields).length > 0) {
+            updateUserFields(profile.user_id, syncFields).catch((err) =>
+              console.warn('[ProfileStore] updateUserFields failed:', err)
+            );
+          }
+        }
       },
 
       checkHandle: async (handle) => {
-        await new Promise((r) => setTimeout(r, 400));
         const { profile } = get();
-        const taken = ['admin', 'bexo', 'team', 'support', 'help'];
-        if (taken.includes(handle.toLowerCase())) return false;
-        if (profile?.handle === handle) return true;
-        return true;
+        return await checkHandleAvailable(handle, profile?.user_id);
       },
 
       setOnboardingStep: (onboardingStep) => set({ onboardingStep }),
@@ -220,32 +303,44 @@ export const useProfileStore = create<ProfileStore>()(
       setParsedResumeData: (parsedResumeData) => set({ parsedResumeData }),
 
       applyParsedResume: (data) => {
-        const { updateProfile } = get();
+        const { updateProfile, profile } = get();
+        const uid = profile?.user_id;
+        
         if (data.headline) updateProfile({ headline: data.headline });
         if (data.bio) updateProfile({ bio: data.bio });
         if (data.location) updateProfile({ location: data.location });
 
-        if (data.education?.length) {
-          set({ education: data.education.map((e) => ({ ...e, id: makeId() })) });
-        }
-        if (data.experiences?.length) {
-          set({ experiences: data.experiences.map((e) => ({ ...e, id: makeId() })) });
-        }
-        if (data.projects?.length) {
-          set({ projects: data.projects.map((p) => ({ ...p, id: makeId() })) });
-        }
-        if (data.skills?.length) {
-          set({
-            skills: data.skills.map((s) => ({
+        if (uid) {
+          if (data.education?.length) {
+            const items = data.education.map((e) => ({ ...e, id: makeId() }));
+            set({ education: items as Education[] });
+            bulkWriteSubCollection(uid, 'education', items).catch(console.warn);
+          }
+          if (data.experiences?.length) {
+            const items = data.experiences.map((e) => ({ ...e, id: makeId() }));
+            set({ experiences: items as Experience[] });
+            bulkWriteSubCollection(uid, 'experiences', items).catch(console.warn);
+          }
+          if (data.projects?.length) {
+            const items = data.projects.map((p) => ({ ...p, id: makeId() }));
+            set({ projects: items as Project[] });
+            bulkWriteSubCollection(uid, 'projects', items).catch(console.warn);
+          }
+          if (data.skills?.length) {
+            const items = data.skills.map((s) => ({
               id: makeId(),
               name: s.name,
               category: s.category || '',
               level: (s.level as Skill['level']) || 'intermediate',
-            })),
-          });
-        }
-        if (data.research?.length) {
-          set({ research: data.research.map((r) => ({ ...r, id: makeId() })) });
+            }));
+            set({ skills: items as Skill[] });
+            bulkWriteSubCollection(uid, 'skills', items).catch(console.warn);
+          }
+          if (data.research?.length) {
+            const items = data.research.map((r) => ({ ...r, id: makeId() }));
+            set({ research: items as Research[] });
+            bulkWriteSubCollection(uid, 'research', items).catch(console.warn);
+          }
         }
       },
 
@@ -281,50 +376,112 @@ export const useProfileStore = create<ProfileStore>()(
         return get().getCompleteness() >= 90;
       },
 
-      addEducation: (e) =>
-        set((s) => ({ education: [...s.education, { ...e, id: makeId() }] })),
-      updateEducation: (id, e) =>
+      addEducation: (e) => {
+        const id = makeId();
+        const uid = get().profile?.user_id;
+        set((s) => ({ education: [...s.education, { ...e, id }] as Education[] }));
+        if (uid) addSubItem(uid, 'education', id, e).catch(console.warn);
+      },
+      updateEducation: (id, e) => {
+        const uid = get().profile?.user_id;
         set((s) => ({
           education: s.education.map((item) =>
             item.id === id ? { ...item, ...e } : item
-          ),
-        })),
-      removeEducation: (id) =>
-        set((s) => ({ education: s.education.filter((e) => e.id !== id) })),
+          ) as Education[],
+        }));
+        if (uid) updateSubItem(uid, 'education', id, e).catch(console.warn);
+      },
+      removeEducation: (id) => {
+        const uid = get().profile?.user_id;
+        set((s) => ({ education: s.education.filter((e) => e.id !== id) }));
+        if (uid) deleteSubItem(uid, 'education', id).catch(console.warn);
+      },
 
-      addExperience: (e) =>
-        set((s) => ({ experiences: [...s.experiences, { ...e, id: makeId() }] })),
-      updateExperience: (id, e) =>
+      addExperience: (e) => {
+        const id = makeId();
+        const uid = get().profile?.user_id;
+        set((s) => ({ experiences: [...s.experiences, { ...e, id }] as Experience[] }));
+        if (uid) addSubItem(uid, 'experiences', id, e).catch(console.warn);
+      },
+      updateExperience: (id, e) => {
+        const uid = get().profile?.user_id;
         set((s) => ({
           experiences: s.experiences.map((item) =>
             item.id === id ? { ...item, ...e } : item
-          ),
-        })),
-      removeExperience: (id) =>
-        set((s) => ({ experiences: s.experiences.filter((e) => e.id !== id) })),
+          ) as Experience[],
+        }));
+        if (uid) updateSubItem(uid, 'experiences', id, e).catch(console.warn);
+      },
+      removeExperience: (id) => {
+        const uid = get().profile?.user_id;
+        set((s) => ({ experiences: s.experiences.filter((e) => e.id !== id) }));
+        if (uid) deleteSubItem(uid, 'experiences', id).catch(console.warn);
+      },
 
-      addProject: (p) =>
-        set((s) => ({ projects: [...s.projects, { ...p, id: makeId() }] })),
-      updateProject: (id, p) =>
+      addProject: (p) => {
+        const id = makeId();
+        const uid = get().profile?.user_id;
+        set((s) => ({ projects: [...s.projects, { ...p, id }] as Project[] }));
+        if (uid) addSubItem(uid, 'projects', id, p).catch(console.warn);
+      },
+      updateProject: (id, p) => {
+        const uid = get().profile?.user_id;
         set((s) => ({
           projects: s.projects.map((item) =>
             item.id === id ? { ...item, ...p } : item
-          ),
-        })),
-      removeProject: (id) =>
-        set((s) => ({ projects: s.projects.filter((p) => p.id !== id) })),
+          ) as Project[],
+        }));
+        if (uid) updateSubItem(uid, 'projects', id, p).catch(console.warn);
+      },
+      removeProject: (id) => {
+        const uid = get().profile?.user_id;
+        set((s) => ({ projects: s.projects.filter((p) => p.id !== id) }));
+        if (uid) deleteSubItem(uid, 'projects', id).catch(console.warn);
+      },
 
-      addSkill: (s) =>
-        set((st) => ({ skills: [...st.skills, { ...s, id: makeId() }] })),
-      removeSkill: (name) =>
-        set((s) => ({ skills: s.skills.filter((sk) => sk.name !== name) })),
+      addSkill: (s) => {
+        const id = makeId();
+        const uid = get().profile?.user_id;
+        set((st) => ({ skills: [...st.skills, { ...s, id }] as Skill[] }));
+        if (uid) addSubItem(uid, 'skills', id, s).catch(console.warn);
+      },
+      removeSkill: (name) => {
+        const uid = get().profile?.user_id;
+        const skill = get().skills.find((sk) => sk.name === name);
+        if (skill) {
+          set((s) => ({ skills: s.skills.filter((sk) => sk.name !== name) }));
+          if (uid) deleteSubItem(uid, 'skills', skill.id).catch(console.warn);
+        }
+      },
 
-      addResearch: (r) =>
-        set((s) => ({ research: [...s.research, { ...r, id: makeId() }] })),
-      removeResearch: (id) =>
-        set((s) => ({ research: s.research.filter((r) => r.id !== id) })),
+      addResearch: (r) => {
+        const id = makeId();
+        const uid = get().profile?.user_id;
+        set((s) => ({ research: [...s.research, { ...r, id }] as Research[] }));
+        if (uid) addSubItem(uid, 'research', id, r).catch(console.warn);
+      },
+      removeResearch: (id) => {
+        const uid = get().profile?.user_id;
+        set((s) => ({ research: s.research.filter((r) => r.id !== id) }));
+        if (uid) deleteSubItem(uid, 'research', id).catch(console.warn);
+      },
 
-      reset: () =>
+      addUpdate: (u) => {
+        const id = makeId();
+        const uid = get().profile?.user_id;
+        const newUpdate = { ...u, id, created_at: new Date().toISOString() };
+        set((s) => ({ updates: [newUpdate, ...s.updates] as Update[] }));
+        if (uid) addSubItem(uid, 'updates', id, newUpdate).catch(console.warn);
+      },
+      removeUpdate: (id) => {
+        const uid = get().profile?.user_id;
+        set((s) => ({ updates: s.updates.filter((u) => u.id !== id) }));
+        if (uid) deleteSubItem(uid, 'updates', id).catch(console.warn);
+      },
+
+      reset: () => {
+        const { stopSync } = get();
+        stopSync();
         set({
           profile: null,
           education: [],
@@ -332,9 +489,11 @@ export const useProfileStore = create<ProfileStore>()(
           projects: [],
           skills: [],
           research: [],
+          updates: [],
           onboardingStep: 'email',
           parsedResumeData: null,
-        }),
+        });
+      },
     }),
     {
       name: 'bexo-profile-v1',

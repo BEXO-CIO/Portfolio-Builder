@@ -1,34 +1,26 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
+import type { Unsubscribe } from '@firebase/firestore';
 
-export type BuildStatus = 'queued' | 'building' | 'done' | 'failed' | null;
+import { subscribeToPortfolio, triggerPortfolioRebuild } from '@/services/firestoreService';
 
-type Update = {
-  id: string;
-  type: 'project' | 'achievement' | 'role' | 'education';
-  title: string;
-  description: string;
-  created_at: string;
-};
+export type BuildStatus = 'QUEUED' | 'BUILDING' | 'DONE' | 'FAILED' | null;
 
 type PortfolioStore = {
   buildStatus: BuildStatus;
   portfolioUrl: string | null;
   buildLog: string | null;
   buildStartedAt: number | null;
-  updates: Update[];
 
-  triggerBuild: (profileId: string) => Promise<void>;
-  setBuildStatus: (status: BuildStatus) => void;
-  addUpdate: (u: Omit<Update, 'id' | 'created_at'>) => void;
-  removeUpdate: (id: string) => void;
+  _unsub: Unsubscribe | null;
+
+  startSync: (uid: string) => void;
+  stopSync: () => void;
+  
+  triggerBuild: (uid: string) => Promise<void>;
   reset: () => void;
 };
-
-function makeId() {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-}
 
 export const usePortfolioStore = create<PortfolioStore>()(
   persist(
@@ -37,42 +29,66 @@ export const usePortfolioStore = create<PortfolioStore>()(
       portfolioUrl: null,
       buildLog: null,
       buildStartedAt: null,
-      updates: [],
+      _unsub: null,
 
-      triggerBuild: async (profileId) => {
-        const handle = profileId;
-        set({ buildStatus: 'queued', buildStartedAt: Date.now(), buildLog: null });
+      startSync: (uid) => {
+        const { stopSync } = get();
+        stopSync(); // Clear existing
 
-        await new Promise((r) => setTimeout(r, 1500));
-        set({ buildStatus: 'building', buildLog: 'Compiling portfolio...' });
-
-        await new Promise((r) => setTimeout(r, 3000));
-        set({
-          buildStatus: 'done',
-          portfolioUrl: `https://${handle}.mybexo.com`,
-          buildLog: 'Build complete.',
+        const unsub = subscribeToPortfolio(uid, (data) => {
+          if (data) {
+            set({
+              buildStatus: data.buildStatus ?? null,
+              portfolioUrl: data.portfolioUrl ?? null,
+              buildLog: data.buildLog ?? null,
+              buildStartedAt: data.buildStartedAt ?? null,
+            });
+          } else {
+            set({
+              buildStatus: null,
+              portfolioUrl: null,
+              buildLog: null,
+              buildStartedAt: null,
+            });
+          }
         });
+        set({ _unsub: unsub });
       },
 
-      setBuildStatus: (buildStatus) => set({ buildStatus }),
+      stopSync: () => {
+        const { _unsub } = get();
+        if (_unsub) _unsub();
+        set({ _unsub: null });
+      },
 
-      addUpdate: (u) =>
-        set((s) => ({
-          updates: [
-            { ...u, id: makeId(), created_at: new Date().toISOString() },
-            ...s.updates,
-          ],
-        })),
+      triggerBuild: async (uid) => {
+        // Optimistic update
+        set({ buildStatus: 'QUEUED', buildStartedAt: Date.now(), buildLog: 'Build requested...' });
+        
+        try {
+          await triggerPortfolioRebuild(uid);
+        } catch (err) {
+          console.warn('[PortfolioStore] triggerBuild failed:', err);
+          // Revert on failure
+          set({ buildStatus: 'FAILED', buildLog: 'Failed to request build.' });
+        }
+      },
 
-      removeUpdate: (id) =>
-        set((s) => ({ updates: s.updates.filter((u) => u.id !== id) })),
-
-      reset: () =>
-        set({ buildStatus: null, portfolioUrl: null, buildLog: null, updates: [] }),
+      reset: () => {
+        const { stopSync } = get();
+        stopSync();
+        set({
+          buildStatus: null,
+          portfolioUrl: null,
+          buildLog: null,
+          buildStartedAt: null,
+        });
+      },
     }),
     {
-      name: 'bexo-portfolio-v1',
+      name: 'bexo-portfolio-v2',
       storage: createJSONStorage(() => AsyncStorage),
+      partialize: ({ _unsub, ...rest }) => rest, // Don't persist unsub function
     }
   )
 );

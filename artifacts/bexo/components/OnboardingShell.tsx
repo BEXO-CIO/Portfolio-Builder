@@ -1,7 +1,7 @@
 import { Feather } from '@expo/vector-icons';
 import React from 'react';
 import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, withSpring, interpolateColor, useDerivedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useColors } from '@/hooks/useColors';
@@ -31,33 +31,35 @@ type Props = {
   children: React.ReactNode;
 };
 
+function Dot({ index, currentStep, activeColor, inactiveColor }: { index: number, currentStep: number, activeColor: string, inactiveColor: string }) {
+  const isActive = index + 1 === currentStep;
+  const isPast = index + 1 < currentStep;
+
+  const width = useDerivedValue(() => {
+    return withSpring(isActive ? 20 : 6, { damping: 15, stiffness: 300 });
+  }, [isActive]);
+
+  const style = useAnimatedStyle(() => {
+    return {
+      width: width.value,
+      backgroundColor: isActive ? activeColor : isPast ? activeColor : inactiveColor,
+      opacity: isActive ? 1 : isPast ? 0.7 : 0.4,
+    };
+  });
+
+  return <Animated.View style={[styles.dot, style]} />;
+}
+
 export function OnboardingShell({ step, onBack, children }: Props) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const currentStep = STEP_LABELS[step] ?? 1;
-  const progress = currentStep / TOTAL_STEPS;
-
-  const animatedProgress = useSharedValue(progress);
-  React.useEffect(() => {
-    animatedProgress.value = withSpring(progress, {
-      stiffness: 210,
-      damping: 22,
-      mass: 0.85,
-    });
-  }, [progress]);
-
-  const barStyle = useAnimatedStyle(() => ({
-    width: `${animatedProgress.value * 100}%` as unknown as number,
-  }));
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top + 8;
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { paddingTop: topPad }]}>
-        <View style={[styles.trackBg, { backgroundColor: colors.border }]}>
-          <Animated.View style={[styles.trackFill, barStyle, { backgroundColor: colors.primary }]} />
-        </View>
         <View style={styles.headerRow}>
           {onBack ? (
             <TouchableOpacity onPress={onBack} style={styles.backBtn} hitSlop={12}>
@@ -66,9 +68,20 @@ export function OnboardingShell({ step, onBack, children }: Props) {
           ) : (
             <View style={styles.backBtn} />
           )}
-          <Text style={[typography.caption, { color: colors.mutedForeground }]}>
-            {currentStep} of {TOTAL_STEPS}
-          </Text>
+          
+          <View style={styles.dotsContainer}>
+            {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
+              <Dot 
+                key={i} 
+                index={i} 
+                currentStep={currentStep} 
+                activeColor={colors.primary} 
+                inactiveColor={colors.border} 
+              />
+            ))}
+          </View>
+
+          <View style={{ width: 32 }} />
         </View>
       </View>
       <View style={styles.content}>{children}</View>
@@ -78,20 +91,21 @@ export function OnboardingShell({ step, onBack, children }: Props) {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  header: { paddingHorizontal: 20 },
-  trackBg: {
-    height: 3,
-    borderRadius: 2,
-    overflow: 'hidden',
-    marginBottom: 12,
-  },
-  trackFill: { height: '100%', borderRadius: 2 },
+  header: { paddingHorizontal: 20, paddingBottom: 12 },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingBottom: 4,
   },
   backBtn: { width: 32, height: 32, justifyContent: 'center' },
+  dotsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  dot: {
+    height: 6,
+    borderRadius: 3,
+  },
   content: { flex: 1, paddingHorizontal: 20 },
 });

@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { Platform, StyleSheet, TextInput, View } from 'react-native';
 
 import { useColors } from '@/hooks/useColors';
-import { typography, radius } from '@/constants/theme';
+import { radius } from '@/constants/theme';
 
 const CODE_LENGTH = 4;
 
@@ -69,7 +69,14 @@ export function OTPInput({ onComplete, disabled, error }: Props) {
         >
           <TextInput
             ref={(r) => { inputRefs.current[i] = r; }}
-            style={[typography.h2, styles.cellText, { color: colors.foreground }]}
+            style={[
+              styles.cellText,
+              {
+                color: colors.foreground,
+                // On Android, tintColor drives the cursor colour
+                ...(Platform.OS === 'android' ? { cursorColor: colors.primary } : {}),
+              },
+            ]}
             value={code[i]}
             onChangeText={(t) => handleChange(t, i)}
             onKeyPress={(e) => handleKeyPress(e, i)}
@@ -80,11 +87,6 @@ export function OTPInput({ onComplete, disabled, error }: Props) {
             selectTextOnFocus
             textAlign="center"
           />
-          {code[i] ? null : (
-            <Text style={[styles.cursor, { color: focused === i ? colors.primary : colors.border }]}>
-              |
-            </Text>
-          )}
         </View>
       ))}
     </View>
@@ -99,11 +101,20 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     justifyContent: 'center',
     alignItems: 'center',
+    overflow: 'hidden',
   },
-  cellText: { textAlign: 'center', fontSize: 28 },
-  cursor: {
-    position: 'absolute',
+  cellText: {
+    // Fill the cell completely so RN centres the text naturally
+    width: 68,
+    height: 72,
     fontSize: 28,
-    fontWeight: '300',
+    fontFamily: 'DMSans_700Bold',
+    textAlign: 'center',
+    textAlignVertical: 'center',
+    // Strip all internal padding so the glyph is truly centred
+    padding: 0,
+    margin: 0,
+    includeFontPadding: false,
+    lineHeight: undefined,
   },
 });
