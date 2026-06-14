@@ -17,7 +17,7 @@ import {
   signInWithCredential,
   signOut as firebaseSignOut,
   User,
-} from '@firebase/auth';
+} from 'firebase/auth';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 

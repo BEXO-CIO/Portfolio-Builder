@@ -28,7 +28,7 @@ import {
   writeBatch,
   Unsubscribe,
   DocumentData,
-} from '@firebase/firestore';
+} from 'firebase/firestore';
 import { db } from './firebase';
 
 // ── User Profile ────────────────────────────────────────────────────────────
