@@ -1,7 +1,7 @@
 import { Feather } from '@expo/vector-icons';
 import React from 'react';
 import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useColors } from '@/hooks/useColors';
@@ -37,12 +37,17 @@ export function OnboardingShell({ step, onBack, children }: Props) {
   const currentStep = STEP_LABELS[step] ?? 1;
   const progress = currentStep / TOTAL_STEPS;
 
-  const barStyle = useAnimatedStyle(() => ({
-    width: withSpring(`${progress * 100}%` as unknown as number, {
+  const animatedProgress = useSharedValue(progress);
+  React.useEffect(() => {
+    animatedProgress.value = withSpring(progress, {
       stiffness: 210,
       damping: 22,
       mass: 0.85,
-    }),
+    });
+  }, [progress]);
+
+  const barStyle = useAnimatedStyle(() => ({
+    width: `${animatedProgress.value * 100}%` as unknown as number,
   }));
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top + 8;
