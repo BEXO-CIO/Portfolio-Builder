@@ -10,16 +10,14 @@ import { typography } from '@/constants/theme';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { useProfileStore } from '@/stores/useProfileStore';
 import { OTPInput } from '@/components/OTPInput';
-import { BexoButton } from '@/components/BexoButton';
 
 function maskPhone(phone: string): string {
   const digits = phone.replace(/\D/g, '');
   if (digits.length >= 10) {
     const last4 = digits.slice(-4);
-    const prefix = phone.startsWith('+91') ? '+91' : '+' + digits.slice(0, digits.length - 10);
-    return prefix + ' ••••• ' + last4;
+    return '+91 ••••• ' + last4;
   }
-  return phone;
+  return phone || '+91 •••••••••';
 }
 
 export default function VerifyScreen() {
@@ -31,19 +29,24 @@ export default function VerifyScreen() {
   const [error, setError] = useState('');
   const [resending, setResending] = useState(false);
   const [resent, setResent] = useState(false);
+  // Incrementing this key unmounts+remounts OTPInput, clearing all cells
+  const [otpKey, setOtpKey] = useState(0);
 
   const handleComplete = async (code: string) => {
     setError('');
     const { error: err } = await verifyOtp(phoneNumber, code);
     if (err) {
-      setError(err);
+      setError('Incorrect code — try again');
+      // Reset cells so user can re-enter cleanly
+      setOtpKey((k) => k + 1);
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       return;
     }
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     const userId = 'user-' + phoneNumber.replace(/\D/g, '').slice(-6);
     initProfile(userId, phoneNumber);
-    router.replace('/(onboarding)/email');
+    // Navigate to root — index.tsx reads session + onboardingStep and redirects correctly
+    router.replace('/');
   };
 
   const handleResend = async () => {
@@ -86,9 +89,14 @@ export default function VerifyScreen() {
           </Text>
         </Animated.View>
 
-        {/* OTP */}
+        {/* OTP cells */}
         <Animated.View entering={FadeInDown.delay(100).springify()} style={styles.otpBlock}>
-          <OTPInput onComplete={handleComplete} disabled={isLoading} error={!!error} />
+          <OTPInput
+            key={otpKey}
+            onComplete={handleComplete}
+            disabled={isLoading}
+            error={!!error}
+          />
 
           {error ? (
             <Animated.View entering={FadeInUp.duration(200)}>
@@ -99,16 +107,21 @@ export default function VerifyScreen() {
           ) : null}
         </Animated.View>
 
-        {/* Dev hint */}
+        {/* Dev hint — only in development builds */}
         {__DEV__ ? (
           <Animated.View
             entering={FadeInDown.delay(150).springify()}
-            style={[styles.devHint, { backgroundColor: colors.accent + '15', borderColor: colors.accent + '30' }]}
+            style={[styles.devHint, {
+              backgroundColor: 'rgba(196, 92, 74, 0.08)',
+              borderColor: 'rgba(196, 92, 74, 0.2)',
+            }]}
           >
-            <Text style={[typography.caption, { color: colors.accent, textAlign: 'center' }]}>
-              Dev: use <Text style={{ fontFamily: 'DMSans_700Bold' }}>0000</Text> for any number
-              {' · '}
-              <Text style={{ fontFamily: 'DMSans_700Bold' }}>1234</Text> for +91 9999999999
+            <Text style={[typography.caption, { color: colors.accent, textAlign: 'center', lineHeight: 18 }]}>
+              Dev hint: enter{' '}
+              <Text style={{ fontFamily: 'DMSans_700Bold' }}>0000</Text>
+              {' '}for any number, or{' '}
+              <Text style={{ fontFamily: 'DMSans_700Bold' }}>1234</Text>
+              {' '}for +91 9999999999
             </Text>
           </Animated.View>
         ) : null}
@@ -149,10 +162,10 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   sub: { lineHeight: 24 },
-  otpBlock: { alignItems: 'center', gap: 16 },
+  otpBlock: { alignItems: 'center', gap: 16, marginBottom: 0 },
   errorText: { textAlign: 'center' },
   devHint: {
-    marginTop: 24,
+    marginTop: 20,
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 10,
@@ -162,6 +175,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 28,
+    marginTop: 24,
   },
 });
