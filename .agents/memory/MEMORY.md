@@ -1,0 +1,1 @@
+- [Bexo Expo setup](bexo-expo-setup.md) — pnpm symlinks require Metro unstable_enableSymlinks + expo pkg version pins for SDK 54

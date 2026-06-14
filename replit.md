@@ -1,45 +1,59 @@
-# [Project name]
+# Bexo
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+A mobile-first portfolio builder for students and early-career professionals — sign in with your phone, upload your resume, and get a live portfolio site at yourhandle.mybexo.com in minutes.
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
+- `artifacts/bexo: expo` workflow — runs the Expo app (QR code for Expo Go + web preview)
 - `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
 
 ## Stack
 
-- pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5
-- DB: PostgreSQL + Drizzle ORM
-- Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (CJS bundle)
+- Expo + React Native + TypeScript
+- Expo Router (file-based routing)
+- Zustand + AsyncStorage (persisted state, no server needed yet)
+- DM Sans (UI font) + JetBrains Mono (metrics)
+- pnpm workspaces, Node.js 24
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/bexo/app/` — all screens (Expo Router)
+- `artifacts/bexo/stores/` — Zustand stores (auth, profile, portfolio)
+- `artifacts/bexo/components/` — shared UI components
+- `artifacts/bexo/services/` — stubbed services (resume parser, upload, achievement parser)
+- `artifacts/bexo/constants/` — design tokens (colors.ts, theme.ts)
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- **No real Supabase yet**: all auth and data is stored in AsyncStorage via Zustand persist. OTP fixed code is `0000`. Replace stores with real Supabase client when credentials are ready.
+- **Onboarding step machine**: `useProfileStore.onboardingStep` drives routing. Root `app/index.tsx` reads it and redirects to the correct screen. Set to `'completed'` or reach 90% completeness to unlock main tabs.
+- **Profile completeness gate**: weighted score (15+15+10+15+15+15+10+5=100). Must hit 90% to trigger portfolio build.
+- **website_preference** stored as comma-separated TEXT (e.g. `"Minimal,Bold,Creative"`).
+- **Resume parsing** is stubbed with realistic mock data in `services/resumeParser.ts`. Replace `uploadAndParseResume()` with real AI call.
+- Metro config patched (`metro.config.js`) to resolve pnpm symlinks: `unstable_enableSymlinks: true` + explicit `nodeModulesPaths`.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+- Phone + OTP sign-in (WhatsApp stub, fixed code `0000` in dev)
+- 11-step onboarding: email → photo → handle → resume → cards → about → dob → theme → font → preference → generating
+- Dashboard with completeness ring, quick stats, recent updates feed
+- Portfolio tab showing all sections (experience, education, projects, skills)
+- Post tab for adding achievements, new roles, shipped projects
+- Portfolio auto-builds when profile hits 90% completeness
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+_None specified yet._
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- Always run `pnpm --filter @workspace/bexo add <pkg>` not `pnpm add` at root — packages must be declared in the artifact's `package.json`.
+- expo-document-picker and expo-image-manipulator must be pinned to `~14.0.8` (Expo 54 SDK compatible versions, NOT 56.x).
+- Metro's `unstable_enableSymlinks` is required for pnpm to resolve any new packages.
+- JetBrains Mono package: `@expo-google-fonts/jetbrains-mono` (not `expo-google-fonts/jetbrains-mono`).
+- `(intro)` route group: register as `(intro)/index` in the Stack, not `(intro)`.
 
 ## Pointers
 
 - See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
+- See the `expo` skill for Expo Go compatibility rules before adding new packages
