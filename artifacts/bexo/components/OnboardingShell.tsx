@@ -1,28 +1,29 @@
 import { Feather } from '@expo/vector-icons';
 import React from 'react';
-import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Animated, { useAnimatedStyle, withSpring, interpolateColor, useDerivedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useColors } from '@/hooks/useColors';
 import { typography } from '@/constants/theme';
 
-const TOTAL_STEPS = 11;
+const TOTAL_STEPS = 10;
 
+// resume, manual, and manual_review are alternate step 3 flows
+// (users take one path or the other, never both)
 const STEP_LABELS: Record<string, number> = {
-  email: 1,
-  photo: 2,
-  handle: 3,
-  resume: 4,
-  manual: 4,
-  manual_review: 4,
-  cards: 5,
-  about: 6,
-  dob: 7,
-  theme: 8,
-  font: 9,
-  preference: 10,
-  generating: 11,
+  photo: 1,
+  handle: 2,
+  resume: 3,
+  manual: 3,
+  manual_review: 3,
+  cards: 4,
+  about: 5,
+  dob: 6,
+  theme: 7,
+  font: 8,
+  preference: 9,
+  generating: 10,
 };
 
 type Props = {
@@ -84,7 +85,12 @@ export function OnboardingShell({ step, onBack, children }: Props) {
           <View style={{ width: 32 }} />
         </View>
       </View>
-      <View style={styles.content}>{children}</View>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.content}
+      >
+        {children}
+      </KeyboardAvoidingView>
     </View>
   );
 }

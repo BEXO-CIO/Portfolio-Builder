@@ -65,7 +65,7 @@ export default function EmailStep() {
           label="Email address"
           value={email}
           onChangeText={(t) => { setEmail(t); setError(''); }}
-          placeholder="you@example.com"
+          placeholder="you@mybexo.com"
           keyboardType="email-address"
           autoCapitalize="none"
           autoComplete="email"

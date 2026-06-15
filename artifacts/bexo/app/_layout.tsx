@@ -46,7 +46,9 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (fontsLoaded || fontError) {
-      SplashScreen.hideAsync();
+      SplashScreen.hideAsync().catch((err) => {
+        console.warn('[SplashScreen] hideAsync failed:', err.message);
+      });
     }
   }, [fontsLoaded, fontError]);
 
@@ -74,8 +76,16 @@ export default function RootLayout() {
                   options={{ headerShown: false, presentation: 'modal' }}
                 />
                 <Stack.Screen
+                  name="notifications"
+                  options={{ headerShown: false, presentation: 'modal' }}
+                />
+                <Stack.Screen
                   name="details"
                   options={{ headerShown: true, title: 'Details' }}
+                />
+                <Stack.Screen
+                  name="edit-item"
+                  options={{ headerShown: false, presentation: 'modal' }}
                 />
                 <Stack.Screen name="faq" options={{ headerShown: false }} />
                 <Stack.Screen name="privacy" options={{ headerShown: false }} />

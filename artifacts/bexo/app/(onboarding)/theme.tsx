@@ -1,13 +1,14 @@
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { useColors } from '@/hooks/useColors';
-import { typography, radius } from '@/constants/theme';
+import { radius } from '@/constants/theme';
 import { useProfileStore } from '@/stores/useProfileStore';
 import { OnboardingShell } from '@/components/OnboardingShell';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { BexoButton } from '@/components/BexoButton';
+import { SelectableCard } from '@/components/SelectableCard';
 
 const THEMES = [
   {
@@ -36,8 +37,17 @@ const THEMES = [
   },
 ];
 
+function ThemePreview({ bg, accent }: { bg: string; accent: string }) {
+  return (
+    <View style={[styles.preview, { backgroundColor: bg, borderRadius: radius.sm }]}>
+      <View style={[styles.previewAccent, { backgroundColor: accent }]} />
+      <View style={[styles.previewBar, { backgroundColor: accent + '40' }]} />
+      <View style={[styles.previewBarShort, { backgroundColor: accent + '20' }]} />
+    </View>
+  );
+}
+
 export default function ThemeStep() {
-  const colors = useColors();
   const router = useRouter();
   const { profile, updateProfile, setOnboardingStep } = useProfileStore();
   const [selected, setSelected] = useState(profile?.portfolio_theme ?? 'editorial');
@@ -53,35 +63,14 @@ export default function ThemeStep() {
       <ScrollView showsVerticalScrollIndicator={false}>
         <ScreenHeader title="Pick a theme" subtitle="You can always change this later from your portfolio settings." />
         {THEMES.map((t) => (
-          <TouchableOpacity
+          <SelectableCard
             key={t.id}
-            style={[
-              styles.card,
-              {
-                borderColor: selected === t.id ? colors.primary : colors.border,
-                borderRadius: radius.md,
-                backgroundColor: colors.surface,
-                borderWidth: selected === t.id ? 2 : 1.5,
-              },
-            ]}
+            selected={selected === t.id}
             onPress={() => setSelected(t.id)}
-            activeOpacity={0.85}
-          >
-            <View style={[styles.preview, { backgroundColor: t.bg, borderRadius: radius.sm }]}>
-              <View style={[styles.previewAccent, { backgroundColor: t.accent }]} />
-              <View style={[styles.previewBar, { backgroundColor: t.accent + '40' }]} />
-              <View style={[styles.previewBarShort, { backgroundColor: t.accent + '20' }]} />
-            </View>
-            <View style={styles.info}>
-              <Text style={[typography.body, { color: colors.foreground, fontFamily: 'DMSans_600SemiBold' }]}>{t.name}</Text>
-              <Text style={[typography.bodySm, { color: colors.mutedForeground }]}>{t.description}</Text>
-            </View>
-            {selected === t.id ? (
-              <View style={[styles.check, { backgroundColor: colors.primary, borderRadius: 12 }]}>
-                <Text style={{ color: '#fff', fontSize: 12 }}>✓</Text>
-              </View>
-            ) : null}
-          </TouchableOpacity>
+            title={t.name}
+            subtitle={t.description}
+            preview={<ThemePreview bg={t.bg} accent={t.accent} />}
+          />
         ))}
         <View style={styles.footer}>
           <BexoButton label="Continue" onPress={handleNext} />
@@ -92,12 +81,9 @@ export default function ThemeStep() {
 }
 
 const styles = StyleSheet.create({
-  card: { flexDirection: 'row', padding: 12, marginBottom: 12, alignItems: 'center', gap: 12 },
   preview: { width: 72, height: 72, padding: 8, justifyContent: 'space-between' },
   previewAccent: { height: 10, borderRadius: 4, width: '50%' },
   previewBar: { height: 6, borderRadius: 3, width: '80%' },
   previewBarShort: { height: 6, borderRadius: 3, width: '60%' },
-  info: { flex: 1, gap: 4 },
-  check: { width: 24, height: 24, justifyContent: 'center', alignItems: 'center' },
   footer: { paddingTop: 8, paddingBottom: 24 },
 });

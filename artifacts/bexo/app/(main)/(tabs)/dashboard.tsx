@@ -14,23 +14,27 @@ import {
   TouchableOpacity,
   View,
   RefreshControl,
+  Dimensions,
+  Linking,
+  Alert,
 } from 'react-native';
 import Animated, { FadeInDown, interpolate, Extrapolation, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withRepeat, withTiming, withSequence, Easing } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useColors } from '@/hooks/useColors';
-import { typography, spacing, radius, shadow } from '@/constants/theme';
+import { typography, shadow } from '@/constants/theme';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { useProfileStore } from '@/stores/useProfileStore';
 import { usePortfolioStore } from '@/stores/usePortfolioStore';
-import { ProgressRing } from '@/components/ProgressRing';
 import { EmptyState } from '@/components/EmptyState';
+
+const { width } = Dimensions.get('window');
 
 function getGreeting() {
   const h = new Date().getHours();
-  if (h < 12) return 'Good morning';
-  if (h < 17) return 'Good afternoon';
-  return 'Good evening';
+  if (h < 12) return 'Good morning,';
+  if (h < 17) return 'Good afternoon,';
+  return 'Good evening,';
 }
 
 function formatRelative(iso: string) {
@@ -43,10 +47,9 @@ function formatRelative(iso: string) {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
-// ── Animated count-up StatBox ─────────────────────────────────────────────────
-
-function StatBox({ label, value, icon, colors, delay }: {
-  label: string; value: number; icon: string; colors: any; delay: number;
+// Stats column component for inside the unified white card
+function StatCol({ label, sublabel, value, icon, delay, showDivider }: {
+  label: string; sublabel: string; value: number; icon: string; delay: number; showDivider?: boolean;
 }) {
   const animVal = useRef(new RNAnimated.Value(0)).current;
 
@@ -60,57 +63,50 @@ function StatBox({ label, value, icon, colors, delay }: {
   }, [value]);
 
   return (
-    <Animated.View entering={FadeInDown.delay(delay * 60).springify()} style={{ flex: 1 }}>
-      <BlurView
-        intensity={60}
-        tint={colors.isDark ? 'dark' : 'light'}
-        style={[styles.statBox, { backgroundColor: colors.isDark ? 'rgba(26,26,31,0.6)' : 'rgba(255,255,255,0.7)', borderColor: colors.border }]}
-      >
-        <View style={[styles.statIconWrap, { backgroundColor: colors.primaryLight }]}>
-          <Feather name={icon as any} size={16} color={colors.primary} />
-        </View>
-        <RNAnimated.Text style={[typography.h2, { color: colors.primary, fontFamily: 'JetBrainsMono_700Bold', marginTop: 10, marginBottom: 2 }]}>
-          {value}
-        </RNAnimated.Text>
-        <Text style={[typography.caption, { color: colors.mutedForeground }]}>{label}</Text>
-      </BlurView>
+    <Animated.View entering={FadeInDown.delay(delay * 60).springify()} style={[styles.statCol, showDivider && styles.statDivider]}>
+      <View style={styles.statIconWrap}>
+        <Feather name={icon as any} size={18} color="#0B4239" />
+      </View>
+      <RNAnimated.Text style={styles.statValue}>
+        {value}
+      </RNAnimated.Text>
+      <Text style={styles.statLabel}>{label}</Text>
+      <Text style={styles.statSublabel}>{sublabel}</Text>
     </Animated.View>
   );
 }
 
-// ── Verification badges ───────────────────────────────────────────────────────
-
-function VerifiedBadge({ icon, label, done, colors }: { icon: string; label: string; done: boolean; colors: any }) {
+// Background dot grid pattern component
+function DotGrid() {
   return (
-    <View style={[styles.badge, {
-      backgroundColor: done ? 'rgba(255,255,255,0.20)' : 'rgba(255,255,255,0.05)',
-      borderColor: done ? 'rgba(255,255,255,0.20)' : 'rgba(255,255,255,0.1)',
-    }]}>
-      <Feather name={icon as any} size={12} color={done ? '#FFFFFF' : 'rgba(255,255,255,0.5)'} />
-      <Text style={[typography.caption, { color: done ? '#FFFFFF' : 'rgba(255,255,255,0.5)', marginLeft: 4, fontFamily: done ? 'DMSans_600SemiBold' : 'DMSans_400Regular' }]}>
-        {label}
-      </Text>
+    <View style={styles.dotGridContainer}>
+      {Array.from({ length: 4 }).map((_, r) => (
+        <View key={`r-${r}`} style={styles.dotGridRow}>
+          {Array.from({ length: 4 }).map((_, c) => (
+            <View key={`c-${c}`} style={styles.dot} />
+          ))}
+        </View>
+      ))}
     </View>
   );
 }
-
-// ── Screen ────────────────────────────────────────────────────────────────────
 
 export default function DashboardScreen() {
   const colors = useColors();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { session } = useAuthStore();
-  const { profile, education, experiences, projects, skills, updates, getCompleteness } = useProfileStore();
+  const { profile, education, experiences, projects, skills, updates, notifications, getCompleteness, startSync } = useProfileStore();
   const { buildStatus, portfolioUrl } = usePortfolioStore();
   const completeness = getCompleteness();
+  const hasUnread = notifications?.some(n => !n.is_read) ?? false;
   const topPad = Platform.OS === 'web' ? 67 : insets.top + 12;
 
   const [refreshing, setRefreshing] = React.useState(false);
   const onRefresh = React.useCallback(() => {
     setRefreshing(true);
     if (profile?.user_id) {
-      useProfileStore.getState().startSync(profile.user_id);
+      startSync(profile.user_id);
     }
     setTimeout(() => setRefreshing(false), 1500);
   }, [profile?.user_id]);
@@ -118,7 +114,6 @@ export default function DashboardScreen() {
   const firstName = profile?.full_name?.split(' ')[0] ?? session?.user.displayName?.split(' ')[0] ?? 'there';
   const avatarUrl = profile?.avatar_url ?? session?.user.photoURL;
 
-  // Pulse animation for status
   const pulseAnim = useSharedValue(1);
   useEffect(() => {
     pulseAnim.value = withRepeat(
@@ -136,15 +131,43 @@ export default function DashboardScreen() {
     opacity: interpolate(pulseAnim.value, [1, 1.4], [1, 0.4]),
   }));
 
-  // Scroll animation
   const scrollY = useSharedValue(0);
   const onScroll = useAnimatedScrollHandler({
-    onScroll: (e) => {
-      scrollY.value = e.contentOffset.y;
-    },
+    onScroll: (e) => { scrollY.value = e.contentOffset.y; },
   });
 
-  const headerHeight = 260 + topPad;
+  const handleProgressClick = () => {
+    if (completeness >= 100) return;
+    
+    const missing: { text: string, route: any }[] = [];
+    const hasIdentity = !!(profile?.full_name && profile?.handle && profile?.avatar_url);
+    if (!hasIdentity) missing.push({ text: '• Profile details (Name, Handle, Photo)', route: '/edit-profile' });
+    
+    const hasBio = !!(profile?.headline && profile?.bio && profile.bio.trim().length > 0 && profile?.location);
+    if (!hasBio) missing.push({ text: '• Bio & Location (Add a headline, bio, and location)', route: '/edit-profile' });
+
+    if (education.length < 1) missing.push({ text: '• Education (Add at least 1)', route: '/(main)/(tabs)/update' });
+    if (experiences.length < 1) missing.push({ text: '• Experience (Add at least 1 role)', route: '/(main)/(tabs)/update' });
+    if (projects.length < 1) missing.push({ text: '• Projects (Add at least 1 project)', route: '/(main)/(tabs)/update' });
+    if (skills.length < 3) missing.push({ text: '• Skills (Add at least 3 skills)', route: '/edit-profile' });
+
+    Alert.alert(
+      'Missing Details',
+      `Complete these to reach 100%:\n\n${missing.map(m => m.text).join('\n')}`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Update Profile', 
+          onPress: () => {
+            const route = missing[0]?.route || '/edit-profile';
+            router.push(route);
+          }
+        }
+      ]
+    );
+  };
+
+  const headerHeight = 300 + topPad;
 
   const stickyHeaderStyle = useAnimatedStyle(() => {
     const opacity = interpolate(scrollY.value, [headerHeight - 100, headerHeight - 40], [0, 1], Extrapolation.CLAMP);
@@ -159,14 +182,15 @@ export default function DashboardScreen() {
   });
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.background }}>
-      {/* Background trick to fix overscroll top color */}
-      <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 400, backgroundColor: colors.gradientHero[0] }} />
+    <View style={{ flex: 1, backgroundColor: '#F8F9F9' }}>
+      {/* Background color for overscroll on iOS */}
+      <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 400, backgroundColor: '#07443B' }} />
+
       {/* Sticky Blurred Header */}
       <Animated.View style={[styles.stickyHeader, { height: topPad + 44, paddingTop: topPad }, stickyHeaderStyle]}>
         <BlurView intensity={80} tint={colors.isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFillObject} />
         <View style={styles.stickyHeaderContent}>
-          <Text style={[typography.h3, { color: colors.foreground }]}>{getGreeting()}, {firstName}</Text>
+          <Text style={[typography.h3, { color: colors.foreground }]}>{getGreeting()} {firstName}</Text>
           <TouchableOpacity onPress={() => router.push('/settings')}>
             {avatarUrl ? <Image source={{ uri: avatarUrl }} style={styles.stickyAvatar} /> : <View style={styles.stickyAvatar} />}
           </TouchableOpacity>
@@ -189,21 +213,37 @@ export default function DashboardScreen() {
           />
         }
       >
-        {/* ── Hero gradient header ────────────────────────────────────────────── */}
+        {/* ── Hero header section ────────────────────────────────────────────── */}
         <Animated.View style={heroStyle}>
           <LinearGradient
-            colors={colors.gradientHero}
-            style={[styles.hero, { paddingTop: topPad }]}
+            colors={['#07443B', '#063A31', '#052A23']}
+            style={[styles.hero, { paddingTop: topPad, paddingBottom: 80 }]} // Extra padding to go behind the card
             start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
           >
-            <View style={styles.heroRow}>
-              <View style={styles.heroText}>
-                <Text style={styles.greeting}>{getGreeting()}</Text>
-                <Text style={styles.heroName}>{firstName}.</Text>
+            {/* Notification Bell */}
+            <TouchableOpacity
+              onPress={() => router.push('/notifications')}
+              style={[styles.notificationBellWrap, { top: topPad + 4 }]}
+              hitSlop={12}
+              activeOpacity={0.7}
+            >
+              <Feather name="bell" size={20} color="#FFFFFF" />
+              {hasUnread && <View style={styles.notificationDot} />}
+            </TouchableOpacity>
+            <View style={{ position: 'absolute', right: 30, top: topPad + 120 }}>
+              <DotGrid />
+            </View>
 
-                {/* Portfolio status indicator */}
+            <View style={styles.heroRow}>
+              <View style={styles.heroTextContainer}>
+                <Text style={styles.greeting}>{getGreeting()}</Text>
+                <Text style={styles.heroName}>
+                  {firstName}
+                  <Text style={{ color: '#10B981' }}>.</Text>
+                </Text>
+
                 <View style={styles.statusRow}>
-                  {buildStatus === 'done' ? (
+                  {buildStatus === 'DONE' && (
                     <View style={styles.livePill}>
                       <View style={{ position: 'relative', width: 8, height: 8, marginRight: 6 }}>
                         <Animated.View style={[styles.liveDot, { position: 'absolute', backgroundColor: '#4ADE80' }, pulseStyle]} />
@@ -211,168 +251,177 @@ export default function DashboardScreen() {
                       </View>
                       <Text style={styles.livePillText}>Portfolio live</Text>
                     </View>
-                  ) : (
-                    <Text style={styles.heroSub}>
-                      {completeness >= 90 ? 'Ready to launch 🚀' : `${Math.round(completeness)}% complete`}
-                    </Text>
                   )}
                 </View>
 
-                {/* Verification badges */}
-                <View style={styles.badgesRow}>
-                  <VerifiedBadge icon="smartphone" label="Phone" done={!!session?.phoneVerified} colors={colors} />
-                  <VerifiedBadge icon="mail" label="Email" done={!!session?.emailVerified} colors={colors} />
+                {/* Contact buttons */}
+                <View style={styles.contactRow}>
+                  <TouchableOpacity 
+                    style={styles.contactBtn}
+                    activeOpacity={0.7}
+                    onPress={() => {
+                      Alert.alert(
+                        'Phone Number',
+                        profile?.phone ?? 'No phone number available',
+                        [{ text: 'Close', style: 'cancel' }]
+                      );
+                    }}
+                  >
+                    <Feather name="smartphone" size={14} color="#FFFFFF" />
+                    <Text style={styles.contactBtnText}>
+                      {profile?.phone ? profile.phone : 'Phone'}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={styles.contactBtn}
+                    activeOpacity={0.7}
+                    onPress={() => {
+                      Alert.alert(
+                        'Email Address',
+                        profile?.email ?? 'No email available',
+                        [{ text: 'Close', style: 'cancel' }]
+                      );
+                    }}
+                  >
+                    <Feather name="mail" size={14} color="#FFFFFF" />
+                    <Text style={styles.contactBtnText}>
+                      {profile?.email ? (profile.email.length > 20 ? `${profile.email.slice(0, 17)}...` : profile.email) : 'Email'}
+                    </Text>
+                  </TouchableOpacity>
                 </View>
               </View>
 
               {/* Avatar */}
-              <TouchableOpacity onPress={() => router.push('/settings')} hitSlop={8}>
-                {avatarUrl ? (
-                  <Image source={{ uri: avatarUrl }} style={styles.avatar} />
-                ) : (
-                  <View style={styles.avatarPlaceholder}>
-                    <Text style={styles.avatarInitial}>
-                      {firstName.charAt(0).toUpperCase()}
-                    </Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-            </View>
-
-            {/* Progress bar */}
-            <View style={styles.progressWrap}>
-              <View style={styles.progressTrack}>
-                <View style={[styles.progressFill, { width: `${completeness}%` as any }]} />
+              <View style={styles.avatarContainer}>
+                <TouchableOpacity onPress={() => router.push('/settings')} hitSlop={8}>
+                  {avatarUrl ? (
+                    <Image source={{ uri: avatarUrl }} style={styles.avatar} />
+                  ) : (
+                    <View style={styles.avatarPlaceholder}>
+                      <Text style={styles.avatarInitial}>
+                        {firstName.charAt(0).toUpperCase()}
+                      </Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+                <View style={[styles.onlineBadge, buildStatus !== 'DONE' && { backgroundColor: '#4B5563', borderColor: '#063A31' }]}>
+                  <Text style={styles.onlineText}>{buildStatus === 'DONE' ? 'Online' : 'Offline'}</Text>
+                </View>
               </View>
-              <Text style={styles.progressLabel}>{Math.round(completeness)}%</Text>
             </View>
           </LinearGradient>
         </Animated.View>
 
         <View style={styles.body}>
 
-          {/* ── Completeness card ──────────────────────────────────────────────── */}
-          {completeness < 90 ? (
-            <Animated.View entering={FadeInDown.delay(60).springify()}>
-              <BlurView intensity={40} tint={colors.isDark ? 'dark' : 'light'} style={[styles.completenessCard, { backgroundColor: colors.isDark ? 'rgba(26,26,31,0.5)' : 'rgba(255,255,255,0.6)', borderColor: colors.border }]}>
-                <View style={styles.completenessRow}>
-                  <ProgressRing percent={completeness} size={60} strokeWidth={5} />
-                  <View style={styles.completenessText}>
-                    <Text style={[typography.h3, { color: colors.foreground }]}>
-                      {100 - Math.round(completeness)}% left to go
-                    </Text>
-                    <Text style={[typography.bodySm, { color: colors.mutedForeground, marginTop: 4 }]}>
-                      {getMissingHint(experiences.length, education.length, projects.length, skills.length)}
-                    </Text>
-                  </View>
+          {/* ── Unified Stats Card ──────────────────────────────────────────────── */}
+          <Animated.View entering={FadeInDown.delay(80).springify()} style={styles.unifiedCard}>
+            {/* Progress Section */}
+            {completeness < 100 && (
+              <TouchableOpacity activeOpacity={0.7} onPress={handleProgressClick} style={styles.progressSection}>
+                <View style={styles.progressHeader}>
+                  <Text style={styles.progressTitle}>Your Progress</Text>
+                  <Text style={styles.progressPercent}>{Math.round(completeness)}%</Text>
                 </View>
-                <TouchableOpacity
-                  style={[styles.completeBtn, { backgroundColor: colors.primary }]}
-                  onPress={() => router.push('/edit-profile')}
-                >
-                  <Feather name="edit-2" size={16} color="#FFFFFF" />
-                  <Text style={[typography.body, { color: '#FFFFFF', fontFamily: 'DMSans_600SemiBold', marginLeft: 8 }]}>
-                    Complete profile
-                  </Text>
-                </TouchableOpacity>
-              </BlurView>
-            </Animated.View>
-          ) : null}
+                <View style={styles.progressTrack}>
+                  <LinearGradient
+                    colors={['#0B4239', '#10B981']}
+                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                    style={[styles.progressFill, { width: `${Math.max(10, completeness)}%` as any }]}
+                  />
+                </View>
+              </TouchableOpacity>
+            )}
 
-          {/* ── Portfolio URL chip ─────────────────────────────────────────────── */}
-          <Animated.View entering={FadeInDown.delay(80).springify()}>
+            {/* Stats Row inside Unified Card */}
+            <View style={styles.statsRow}>
+              <StatCol label="Experience" sublabel="Years" value={experiences.length} icon="briefcase" delay={1} showDivider />
+              <StatCol label="Projects" sublabel="Completed" value={projects.length} icon="code" delay={2} showDivider />
+              <StatCol label="Skills" sublabel="Mastered" value={skills.length} icon="zap" delay={3} />
+            </View>
+          </Animated.View>
+
+          <Animated.View entering={FadeInDown.delay(100).springify()}>
             <Pressable
-              style={[styles.urlChip, {
-                backgroundColor: buildStatus === 'done' ? colors.successLight : colors.muted,
-                borderColor: buildStatus === 'done' ? colors.success + '40' : colors.border,
-              }]}
-              onPress={() => router.push('/(main)/(tabs)/portfolio')}
+              style={styles.urlCard}
+              onPress={() => {
+                if (buildStatus === 'DONE' && portfolioUrl) {
+                  Linking.openURL(portfolioUrl.startsWith('http') ? portfolioUrl : `https://${portfolioUrl}`);
+                } else {
+                  router.push('/(main)/(tabs)/portfolio');
+                }
+              }}
             >
-              <Feather
-                name={buildStatus === 'done' ? 'globe' : 'lock'}
-                size={16}
-                color={buildStatus === 'done' ? colors.success : colors.mutedForeground}
-              />
-              <Text style={[typography.bodySm, {
-                color: buildStatus === 'done' ? colors.success : colors.mutedForeground,
-                flex: 1,
-                fontFamily: 'DMSans_500Medium',
-                marginLeft: 10,
-              }]}>
-                {buildStatus === 'done' && portfolioUrl
-                  ? portfolioUrl
-                  : profile?.handle ? `${profile.handle}.mybexo.com` : 'yourhandle.mybexo.com'}
-              </Text>
-              <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+              <View style={styles.urlIconWrap}>
+                <Feather name={buildStatus === 'DONE' ? 'globe' : 'lock'} size={20} color="#FFFFFF" />
+              </View>
+              <View style={styles.urlTextWrap}>
+                <Text style={styles.urlPrimaryText}>
+                  {buildStatus === 'DONE' && portfolioUrl
+                    ? portfolioUrl
+                    : profile?.handle ? `${profile.handle}.mybexo.com` : 'yourhandle.mybexo.com'}
+                </Text>
+                <Text style={styles.urlSubText}>Visit your portfolio website</Text>
+              </View>
+              <View style={styles.urlActionBtn}>
+                <Feather name="arrow-up-right" size={20} color="#FFFFFF" />
+              </View>
             </Pressable>
           </Animated.View>
 
-
-          {/* ── Stats ──────────────────────────────────────────────────────────── */}
-          <Animated.View entering={FadeInDown.delay(120).springify()} style={styles.statsRow}>
-            <StatBox label="Experience" value={experiences.length} icon="briefcase" colors={colors} delay={1} />
-            <StatBox label="Projects" value={projects.length} icon="code" colors={colors} delay={2} />
-            <StatBox label="Skills" value={skills.length} icon="zap" colors={colors} delay={3} />
-          </Animated.View>
-
-          {/* ── Experience alert ────────────────────────────────────────────────── */}
-          {experiences.length === 0 ? (
-            <Animated.View entering={FadeInDown.delay(140).springify()}>
-              <Pressable
-                style={[styles.alertCard, { backgroundColor: colors.warningLight, borderColor: colors.warning + '30' }]}
-                onPress={() => router.push('/(onboarding)/resume')}
-              >
-                <Feather name="upload-cloud" size={20} color={colors.warning} />
-                <View style={{ flex: 1, marginLeft: 12 }}>
-                  <Text style={[typography.body, { color: colors.warning, fontFamily: 'DMSans_600SemiBold' }]}>
-                    Upload your resume
-                  </Text>
-                  <Text style={[typography.caption, { color: colors.warning, marginTop: 2 }]}>
-                    Auto-fill experience, education & skills in seconds.
-                  </Text>
-                </View>
-                <Feather name="chevron-right" size={18} color={colors.warning} />
-              </Pressable>
-            </Animated.View>
-          ) : null}
-
           {/* ── Recent updates ──────────────────────────────────────────────────── */}
-          <Animated.View entering={FadeInDown.delay(160).springify()} style={styles.section}>
-            <Text style={[typography.overline, { color: colors.mutedForeground, marginBottom: 14 }]}>
-              RECENT UPDATES
-            </Text>
+          <Animated.View entering={FadeInDown.delay(120).springify()} style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Recent Updates</Text>
+              <TouchableOpacity onPress={() => router.push('/(main)/(tabs)/update')} style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Text style={styles.viewAllText}>View all</Text>
+                <Feather name="arrow-right" size={14} color="#10B981" style={{ marginLeft: 4 }} />
+              </TouchableOpacity>
+            </View>
+
             {updates?.length === 0 || !updates ? (
-              <EmptyState
-                icon="activity"
-                title="No updates yet"
-                message="Post an achievement, new role, or project from the Post tab."
-              />
+              <EmptyState icon="activity" title="No updates yet" message="Post an achievement, new role, or project." />
             ) : (
-              (updates as any[]).slice(0, 5).map((u: any) => (
-                <View key={u.id} style={[styles.updateRow, { borderBottomColor: colors.border }]}>
-                  <View style={[styles.updateDot, { backgroundColor: colors.primary }]} />
-                  <View style={styles.updateText}>
-                    <Text style={[typography.body, { color: colors.foreground, fontFamily: 'DMSans_500Medium' }]}>{u.title}</Text>
-                    <Text style={[typography.caption, { color: colors.mutedForeground, marginTop: 2 }]}>
-                      {u.type} · {formatRelative(u.created_at)}
-                    </Text>
+              (updates as any[]).slice(0, 3).map((u: any) => (
+                <TouchableOpacity
+                  key={u.id}
+                  style={styles.updateCard}
+                  activeOpacity={0.7}
+                  onPress={() => router.push({ pathname: '/edit-item', params: { id: u.id, category: 'update' } })}
+                >
+                  <View style={styles.updateIconWrap}>
+                    <Feather name={u.type === 'role' ? 'briefcase' : u.type === 'education' ? 'book-open' : u.type === 'project' ? 'terminal' : 'star'} size={16} color="#0B3A36" />
                   </View>
-                </View>
+                  <View style={styles.updateTextContent}>
+                    <Text style={styles.updateItemTitle}>{u.title}</Text>
+                    <Text style={styles.updateItemSub}>{u.type}</Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text style={styles.updateTime}>{formatRelative(u.created_at)}</Text>
+                    <Feather name="chevron-right" size={14} color="#10B981" />
+                  </View>
+                </TouchableOpacity>
               ))
             )}
           </Animated.View>
+
+          {/* ── Quote Footer ────────────────────────────────────────────────────── */}
+          <Animated.View entering={FadeInDown.delay(160).springify()} style={{ marginBottom: 40 }}>
+            <View style={styles.quoteCard}>
+              <View style={styles.quoteIconWrap}>
+                <Feather name="message-square" size={16} color="#FFFFFF" />
+              </View>
+              <Text style={styles.quoteText}>Discipline today, success tomorrow.</Text>
+              <View style={{ position: 'absolute', right: 16, top: 20, opacity: 0.15 }}>
+                 <DotGrid />
+              </View>
+            </View>
+          </Animated.View>
+
         </View>
       </Animated.ScrollView>
     </View>
   );
-}
-
-function getMissingHint(exp: number, edu: number, proj: number, skills: number) {
-  if (exp === 0) return 'Add at least one work experience to continue.';
-  if (edu === 0) return 'Add your education details.';
-  if (proj === 0) return 'Add a project to show what you build.';
-  if (skills < 3) return 'Add 3+ skills to complete your profile.';
-  return 'A few more details will get you to launch.';
 }
 
 const styles = StyleSheet.create({
@@ -390,59 +439,122 @@ const styles = StyleSheet.create({
 
   hero: {
     paddingHorizontal: 24,
-    paddingBottom: 32,
     borderBottomLeftRadius: 32,
     borderBottomRightRadius: 32,
-    ...shadow.lg,
+    paddingBottom: 60, // Ensure overlap
   },
-  heroRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
-  heroText: { flex: 1, paddingRight: 16 },
-  greeting: { fontFamily: 'DMSans_400Regular', fontSize: 14, color: 'rgba(255,255,255,0.7)', marginBottom: 4 },
-  heroName: { fontFamily: 'DMSans_700Bold', fontSize: 32, color: '#FFFFFF', letterSpacing: -0.8, lineHeight: 38 },
-  statusRow: { marginTop: 8 },
-  heroSub: { fontFamily: 'DMSans_400Regular', fontSize: 14, color: 'rgba(255,255,255,0.72)' },
+  heroRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginTop: 16 },
+  heroTextContainer: { flex: 1, paddingRight: 16 },
+  greeting: { fontFamily: 'DMSans_500Medium', fontSize: 15, color: '#E5E7EB', marginBottom: 4 },
+  heroName: { fontFamily: 'DMSans_700Bold', fontSize: 34, color: '#FFFFFF', letterSpacing: -0.8, lineHeight: 40 },
+  statusRow: { marginTop: 6, marginBottom: 16 },
+  heroSub: { fontFamily: 'DMSans_400Regular', fontSize: 14, color: '#D1D5DB' },
   livePill: { flexDirection: 'row', alignItems: 'center' },
   liveDot: { width: 8, height: 8, borderRadius: 4 },
   livePillText: { fontFamily: 'DMSans_600SemiBold', fontSize: 14, color: '#4ADE80' },
-  badgesRow: { flexDirection: 'row', gap: 8, marginTop: 12 },
-  badge: {
+  
+  contactRow: { flexDirection: 'row', gap: 10, marginTop: 4 },
+  contactBtn: {
     flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 10, paddingVertical: 5,
-    borderRadius: 20, borderWidth: 1,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    paddingHorizontal: 12, paddingVertical: 8,
+    borderRadius: 20,
+    gap: 6,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)',
   },
-  avatar: { width: 56, height: 56, borderRadius: 28, borderWidth: 2.5, borderColor: 'rgba(255,255,255,0.4)', ...shadow.md },
+  contactBtnText: { color: '#FFFFFF', fontFamily: 'DMSans_500Medium', fontSize: 13 },
+
+  avatarContainer: { position: 'relative' },
+  avatar: { width: 72, height: 72, borderRadius: 36, borderWidth: 3, borderColor: '#10B981', ...shadow.lg },
   avatarPlaceholder: {
-    width: 56, height: 56, borderRadius: 28,
+    width: 72, height: 72, borderRadius: 36,
     backgroundColor: 'rgba(255,255,255,0.20)',
     justifyContent: 'center', alignItems: 'center',
-    borderWidth: 2, borderColor: 'rgba(255,255,255,0.35)',
+    borderWidth: 3, borderColor: '#10B981',
   },
-  avatarInitial: { fontFamily: 'DMSans_700Bold', fontSize: 24, color: '#FFFFFF' },
-  progressWrap: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 24 },
-  progressTrack: { flex: 1, height: 4, backgroundColor: 'rgba(255,255,255,0.20)', borderRadius: 2, overflow: 'hidden' },
-  progressFill: { height: '100%', backgroundColor: '#FFFFFF', borderRadius: 2 },
-  progressLabel: { fontFamily: 'DMSans_600SemiBold', fontSize: 12, color: 'rgba(255,255,255,0.85)' },
+  avatarInitial: { fontFamily: 'DMSans_700Bold', fontSize: 28, color: '#FFFFFF' },
+  onlineBadge: {
+    position: 'absolute', bottom: -6, alignSelf: 'center',
+    backgroundColor: '#059669', paddingHorizontal: 8, paddingVertical: 2,
+    borderRadius: 12, borderWidth: 2, borderColor: '#063A31',
+  },
+  onlineText: { color: '#FFFFFF', fontSize: 10, fontFamily: 'DMSans_600SemiBold' },
 
-  body: { paddingHorizontal: 20, paddingTop: 20 },
-  completenessCard: { borderRadius: 16, borderWidth: 1.5, padding: 18, marginBottom: 16, gap: 14, overflow: 'hidden' },
-  completenessRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
-  completenessText: { flex: 1 },
-  completeBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 13, borderRadius: 12 },
+  notificationBellWrap: {
+    position: 'absolute',
+    right: 110,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+    elevation: 10,
+  },
+  notificationDot: {
+    position: 'absolute',
+    top: 6,
+    right: 7,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#10B981',
+    borderWidth: 1.5,
+    borderColor: '#063A31',
+  },
+  dotGridContainer: { gap: 4 },
+  dotGridRow: { flexDirection: 'row', gap: 4 },
+  dot: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: 'rgba(255,255,255,0.2)' },
 
-  urlChip: { flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: 12, borderWidth: 1.5, marginBottom: 16 },
+  body: { paddingHorizontal: 20, marginTop: -60 }, // Pull up over the hero gradient
+  
+  unifiedCard: {
+    backgroundColor: '#FFFFFF', borderRadius: 24, padding: 20, marginBottom: 20,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.04, shadowRadius: 20, elevation: 5,
+  },
+  progressSection: { marginBottom: 20 },
+  progressHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  progressTitle: { fontFamily: 'DMSans_600SemiBold', fontSize: 15, color: '#111827' },
+  progressPercent: { fontFamily: 'DMSans_700Bold', fontSize: 15, color: '#059669' },
+  progressTrack: { height: 8, backgroundColor: '#E5E7EB', borderRadius: 4, overflow: 'hidden' },
+  progressFill: { height: '100%', borderRadius: 4 },
+  
+  statsRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#F3F4F6', paddingTop: 20 },
+  statCol: { flex: 1, alignItems: 'center' },
+  statDivider: { borderRightWidth: 1, borderRightColor: '#F3F4F6' },
+  statIconWrap: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', marginBottom: 8, backgroundColor: '#ECFDF5' },
+  statValue: { fontFamily: 'DMSans_700Bold', fontSize: 22, color: '#111827' },
+  statLabel: { fontFamily: 'DMSans_500Medium', fontSize: 12, color: '#374151', marginTop: 2 },
+  statSublabel: { fontFamily: 'DMSans_400Regular', fontSize: 11, color: '#6B7280' },
 
-  actionsRow: { flexDirection: 'row', gap: 10, marginBottom: 20 },
-  actionBtn: { flex: 1, borderRadius: 14, borderWidth: 1.5, overflow: 'hidden', ...shadow.sm },
-  actionIconWrap: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
+  urlCard: {
+    backgroundColor: '#0B4239', borderRadius: 16, padding: 16, flexDirection: 'row', alignItems: 'center', marginBottom: 24,
+    shadowColor: '#0B3A36', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 6,
+  },
+  urlIconWrap: { width: 40, height: 40, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center', marginRight: 14 },
+  urlTextWrap: { flex: 1 },
+  urlPrimaryText: { fontFamily: 'DMSans_600SemiBold', fontSize: 14, color: '#FFFFFF', marginBottom: 2 },
+  urlSubText: { fontFamily: 'DMSans_400Regular', fontSize: 12, color: 'rgba(255,255,255,0.7)' },
+  urlActionBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#10B981', justifyContent: 'center', alignItems: 'center' },
 
-  statsRow: { flexDirection: 'row', gap: 10, marginBottom: 20 },
-  statBox: { flex: 1, padding: 14, alignItems: 'center', borderRadius: 14, borderWidth: 1.5, overflow: 'hidden', ...shadow.sm },
-  statIconWrap: { width: 32, height: 32, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
+  section: { marginBottom: 24 },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
+  sectionTitle: { fontFamily: 'DMSans_600SemiBold', fontSize: 16, color: '#111827' },
+  viewAllText: { fontFamily: 'DMSans_500Medium', fontSize: 13, color: '#10B981' },
+  
+  updateCard: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 14, flexDirection: 'row', alignItems: 'center', marginBottom: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.02, shadowRadius: 8, elevation: 2 },
+  updateIconWrap: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#ECFDF5', justifyContent: 'center', alignItems: 'center', marginRight: 14 },
+  updateTextContent: { flex: 1 },
+  updateItemTitle: { fontFamily: 'DMSans_600SemiBold', fontSize: 14, color: '#111827', marginBottom: 2 },
+  updateItemSub: { fontFamily: 'DMSans_400Regular', fontSize: 12, color: '#6B7280' },
+  updateTime: { fontFamily: 'DMSans_500Medium', fontSize: 11, color: '#10B981' },
 
-  alertCard: { flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 14, borderWidth: 1, marginBottom: 20 },
+  quickAccessGrid: { flexDirection: 'row', justifyContent: 'space-between' },
+  quickAccessBtn: { width: (width - 40 - 24) / 4, backgroundColor: '#FFFFFF', borderRadius: 16, paddingVertical: 16, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.03, shadowRadius: 8, elevation: 2 },
+  quickAccessLabel: { fontFamily: 'DMSans_500Medium', fontSize: 11, color: '#111827' },
 
-  section: { marginBottom: 20 },
-  updateRow: { flexDirection: 'row', paddingVertical: 13, borderBottomWidth: StyleSheet.hairlineWidth, gap: 12, alignItems: 'flex-start' },
-  updateDot: { width: 8, height: 8, borderRadius: 4, marginTop: 7 },
-  updateText: { flex: 1 },
+  quoteCard: { backgroundColor: '#0B4239', borderRadius: 16, padding: 20, flexDirection: 'row', alignItems: 'center', overflow: 'hidden' },
+  quoteIconWrap: { width: 32, height: 32, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.1)', justifyContent: 'center', alignItems: 'center', marginRight: 16 },
+  quoteText: { flex: 1, fontFamily: 'DMSans_400Regular', fontSize: 13, color: '#FFFFFF' },
 });

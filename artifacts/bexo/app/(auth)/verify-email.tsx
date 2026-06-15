@@ -35,6 +35,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import { typography, shadow } from '@/constants/theme';
 import { useAuthStore } from '@/stores/useAuthStore';
+import { GOOGLE_CLIENT_IDS } from '@/services/googleAuth';
 
 // Complete WebBrowser session so the OAuth redirect browser tab closes cleanly
 WebBrowser.maybeCompleteAuthSession();
@@ -97,16 +98,16 @@ export default function VerifyEmailScreen() {
 
   // Google OAuth request
   const [request, response, promptAsync] = Google.useAuthRequest({
-    clientId: '860803616355-fr9uc2gp3em7n9c99gqoccp2homoj09l.apps.googleusercontent.com',
-    iosClientId: '860803616355-fr9uc2gp3em7n9c99gqoccp2homoj09l.apps.googleusercontent.com',
-    androidClientId: '860803616355-fr9uc2gp3em7n9c99gqoccp2homoj09l.apps.googleusercontent.com',
+    clientId: GOOGLE_CLIENT_IDS.web,
+    iosClientId: GOOGLE_CLIENT_IDS.ios,
+    androidClientId: GOOGLE_CLIENT_IDS.android,
     redirectUri: makeRedirectUri({ scheme: 'com.mybexo.app' }),
   });
 
   // Process Google OAuth response
   useEffect(() => {
     if (response?.type === 'success') {
-      const { id_token, access_token } = response.authentication ?? {};
+      const { id_token, access_token } = (response.authentication as any) ?? {};
       if (id_token) {
         handleGoogleLink(id_token, access_token ?? undefined);
       } else {
@@ -134,18 +135,6 @@ export default function VerifyEmailScreen() {
     await promptAsync();
   };
 
-  // DEV mode: skip Google (only in __DEV__ so never shows in production)
-  const handleDevSkip = async () => {
-    if (!__DEV__) return;
-    setError('');
-    // Simulate Google link with a fake token in dev
-    const { error: err } = await linkGoogle('dev-fake-id-token', undefined);
-    if (err) setError(err);
-    else {
-      setSuccess(true);
-      setTimeout(() => router.replace('/'), 900);
-    }
-  };
 
   if (success) {
     return (
@@ -238,7 +227,7 @@ export default function VerifyEmailScreen() {
           <Animated.View style={pulseStyle}>
             <Pressable
               onPress={handleGooglePress}
-              disabled={!request && !__DEV__}
+              disabled={!request}
               style={({ pressed }) => [
                 styles.googleBtn,
                 {
@@ -268,14 +257,6 @@ export default function VerifyEmailScreen() {
           </Animated.View>
         ) : null}
 
-        {/* Dev skip */}
-        {__DEV__ && (
-          <Pressable onPress={handleDevSkip} style={styles.devSkip}>
-            <Text style={[typography.caption, { color: colors.mutedForeground }]}>
-              [DEV] Skip Google — simulate link
-            </Text>
-          </Pressable>
-        )}
       </Animated.View>
 
       {/* Sign out link */}

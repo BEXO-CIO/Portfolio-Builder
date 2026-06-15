@@ -2,6 +2,7 @@ import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withTiming, Easing, cancelAnimation } from 'react-native-reanimated';
 
 import { useColors } from '@/hooks/useColors';
 import { typography, spacing } from '@/constants/theme';
@@ -48,6 +49,25 @@ export default function HandleStep() {
   const statusIcon = status === 'available' ? 'check-circle' : status === 'taken' ? 'x-circle' : 'loader';
   const statusText = status === 'available' ? `${handle}.mybexo.com is available` : status === 'taken' ? 'That handle is taken' : status === 'checking' ? 'Checking…' : '';
 
+  // Spinning animation for the loader icon
+  const spinValue = useSharedValue(0);
+  useEffect(() => {
+    if (status === 'checking') {
+      spinValue.value = 0;
+      spinValue.value = withRepeat(
+        withTiming(360, { duration: 1000, easing: Easing.linear }),
+        -1,
+        false
+      );
+    } else {
+      cancelAnimation(spinValue);
+      spinValue.value = 0;
+    }
+  }, [status]);
+  const spinStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${spinValue.value}deg` }],
+  }));
+
   return (
     <OnboardingShell step="handle" onBack={() => router.back()}>
       <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
@@ -68,7 +88,13 @@ export default function HandleStep() {
         />
         {statusText ? (
           <View style={styles.statusRow}>
-            <Feather name={statusIcon} size={14} color={statusColor} />
+            {status === 'checking' ? (
+              <Animated.View style={spinStyle}>
+                <Feather name={statusIcon} size={14} color={statusColor} />
+              </Animated.View>
+            ) : (
+              <Feather name={statusIcon} size={14} color={statusColor} />
+            )}
             <Text style={[typography.bodySm, { color: statusColor, marginLeft: 6 }]}>
               {statusText}
             </Text>

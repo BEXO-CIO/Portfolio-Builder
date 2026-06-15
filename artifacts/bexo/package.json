@@ -58,6 +58,11 @@
   "dependencies": {
     "@expo-google-fonts/dm-sans": "^0.4.2",
     "@expo-google-fonts/jetbrains-mono": "^0.4.1",
+    "@expo-google-fonts/montserrat": "^0.4.2",
+    "@expo-google-fonts/playfair-display": "^0.4.2",
+    "@expo-google-fonts/poppins": "^0.4.1",
+    "@expo-google-fonts/space-grotesk": "^0.4.1",
+    "@google/generative-ai": "^0.24.1",
     "expo-auth-session": "~7.0.11",
     "expo-crypto": "~15.0.9",
     "expo-document-picker": "^14.0.8",

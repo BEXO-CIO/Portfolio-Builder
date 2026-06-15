@@ -3,6 +3,8 @@ import React, { useState } from 'react';
 import {
   FlatList,
   Modal,
+  Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -224,6 +226,128 @@ export function DayPickerSheet({ visible, selected, onSelect, onClose }: DayProp
   );
 }
 
+// ── Date Picker (Month + Year horizontal scroller) ───────────────────────────
+
+const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const PICKER_YEARS = Array.from({ length: 40 }, (_, i) => new Date().getFullYear() + 5 - i);
+
+type DatePickerProps = {
+  visible: boolean;
+  /** If true, only shows year selector (no month row) */
+  yearOnly?: boolean;
+  /** Current formatted value like "Jan 2024" or "2024" */
+  value?: string;
+  onConfirm: (formatted: string) => void;
+  onClose: () => void;
+};
+
+export function DatePickerSheet({ visible, yearOnly, value, onConfirm, onClose }: DatePickerProps) {
+  const colors = useColors();
+  const insets = useSafeAreaInsets();
+
+  // Parse initial month/year from value
+  const parsedMonth = (() => {
+    if (value) {
+      const parts = value.split(' ');
+      if (parts.length === 2 && SHORT_MONTHS.includes(parts[0])) return parts[0];
+    }
+    return SHORT_MONTHS[new Date().getMonth()];
+  })();
+  const parsedYear = (() => {
+    if (value) {
+      const parts = value.split(' ');
+      if (parts.length === 2) return parts[1];
+      if (parts.length === 1 && parts[0].length === 4) return parts[0];
+    }
+    return new Date().getFullYear().toString();
+  })();
+
+  const [tempMonth, setTempMonth] = useState(parsedMonth);
+  const [tempYear, setTempYear] = useState(parsedYear);
+
+  // Reset when opening
+  React.useEffect(() => {
+    if (visible) {
+      setTempMonth(parsedMonth);
+      setTempYear(parsedYear);
+    }
+  }, [visible]);
+
+  const handleConfirm = () => {
+    const formatted = yearOnly ? tempYear : `${tempMonth} ${tempYear}`;
+    onConfirm(formatted);
+    onClose();
+  };
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <TouchableOpacity style={styles.backdrop} onPress={onClose} />
+      <View
+        style={[
+          styles.sheet,
+          {
+            backgroundColor: colors.surface,
+            paddingBottom: insets.bottom + 16,
+            borderTopLeftRadius: radius.xl,
+            borderTopRightRadius: radius.xl,
+          },
+        ]}
+      >
+        <View style={[styles.handle, { backgroundColor: colors.border }]} />
+        <View style={styles.sheetHeader}>
+          <Text style={[typography.h3, { color: colors.foreground }]}>Select Date</Text>
+          <TouchableOpacity onPress={onClose}>
+            <Feather name="x" size={20} color={colors.mutedForeground} />
+          </TouchableOpacity>
+        </View>
+
+        {!yearOnly && (
+          <>
+            <Text style={[typography.label, { color: colors.mutedForeground, paddingHorizontal: 20, marginBottom: 8 }]}>MONTH</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: 20 }}>
+              {SHORT_MONTHS.map(m => (
+                <TouchableOpacity
+                  key={m}
+                  onPress={() => setTempMonth(m)}
+                  style={[styles.dateChip, {
+                    backgroundColor: tempMonth === m ? colors.primary : colors.background,
+                    borderColor: tempMonth === m ? colors.primary : colors.border,
+                  }]}
+                >
+                  <Text style={[typography.body, { color: tempMonth === m ? '#fff' : colors.foreground }]}>{m}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </>
+        )}
+
+        <Text style={[typography.label, { color: colors.mutedForeground, paddingHorizontal: 20, marginTop: 24, marginBottom: 8 }]}>YEAR</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: 20 }}>
+          {PICKER_YEARS.map(y => (
+            <TouchableOpacity
+              key={y}
+              onPress={() => setTempYear(y.toString())}
+              style={[styles.dateChip, {
+                backgroundColor: tempYear === y.toString() ? colors.primary : colors.background,
+                borderColor: tempYear === y.toString() ? colors.primary : colors.border,
+              }]}
+            >
+              <Text style={[typography.body, { color: tempYear === y.toString() ? '#fff' : colors.foreground }]}>{y}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
+        <TouchableOpacity
+          style={[styles.dateConfirmBtn, { backgroundColor: colors.primary }]}
+          onPress={handleConfirm}
+        >
+          <Text style={[typography.body, { color: '#fff', fontFamily: 'DMSans_600SemiBold' }]}>Confirm Date</Text>
+        </TouchableOpacity>
+      </View>
+    </Modal>
+  );
+}
+
 const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(28,25,23,0.4)' },
   sheet: { maxHeight: '70%' },
@@ -242,5 +366,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  dateChip: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  dateConfirmBtn: {
+    marginHorizontal: 20,
+    marginTop: 32,
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
   },
 });

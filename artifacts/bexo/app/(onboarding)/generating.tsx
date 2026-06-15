@@ -11,6 +11,22 @@ import { usePortfolioStore } from '@/stores/usePortfolioStore';
 import { BuildStatusCard } from '@/components/BuildStatusCard';
 import { ProgressRing } from '@/components/ProgressRing';
 import { BexoButton } from '@/components/BexoButton';
+import { OnboardingShell } from '@/components/OnboardingShell';
+
+/**
+ * Returns the route to the specific onboarding screen where the user
+ * should go to fill in missing data, based on completeness weights.
+ */
+function getMissingRoute(store: ReturnType<typeof useProfileStore.getState>): string {
+  const { profile, education, experiences, projects, skills } = store;
+  if (!profile?.avatar_url) return '/(onboarding)/photo';
+  if (!profile?.handle || profile.handle.length < 3) return '/(onboarding)/handle';
+  if (!profile?.headline || !profile?.bio || !profile.bio.trim() || !profile?.location) return '/(onboarding)/about';
+  if (education.length < 1 || experiences.length < 1 || projects.length < 1) return '/(onboarding)/cards';
+  if (skills.length < 3) return '/(onboarding)/cards';
+  if (profile.portfolio_theme === 'default' && profile.portfolio_font === 'modern') return '/(onboarding)/theme';
+  return '/(onboarding)/preference';
+}
 
 export default function GeneratingScreen() {
   const colors = useColors();
@@ -40,10 +56,17 @@ export default function GeneratingScreen() {
 
   const isReady = completeness >= 90;
 
+  const handleGoBack = () => {
+    const route = getMissingRoute(useProfileStore.getState());
+    router.push(route as any);
+  };
+
   return (
-    <View style={[styles.root, { backgroundColor: colors.background }]}>
-      <Animated.View entering={FadeIn.springify()} style={styles.center}>
-        <ProgressRing percent={completeness} size={96} strokeWidth={6} />
+    <OnboardingShell step="generating" onBack={() => router.back()}>
+      <View style={styles.center}>
+        <Animated.View entering={FadeIn.springify()} style={styles.ringWrap}>
+          <ProgressRing percent={completeness} size={96} strokeWidth={6} />
+        </Animated.View>
         <Animated.View entering={FadeInDown.delay(80).springify()} style={styles.textBlock}>
           <Text style={[typography.h2, { color: colors.foreground, textAlign: 'center', letterSpacing: -0.3 }]}>
             {buildStatus === 'DONE'
@@ -81,20 +104,20 @@ export default function GeneratingScreen() {
         {!isReady ? (
           <Animated.View entering={FadeInDown.delay(200).springify()}>
             <BexoButton
-              label="Go back and complete profile"
-              onPress={() => router.back()}
+              label="Complete missing details"
+              onPress={handleGoBack}
               variant="secondary"
             />
           </Animated.View>
         ) : null}
-      </Animated.View>
-    </View>
+      </View>
+    </OnboardingShell>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32, gap: 24 },
-  textBlock: { alignItems: 'center', gap: 4 },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 24 },
+  ringWrap: { alignItems: 'center' },
+  textBlock: { alignItems: 'center', gap: 4, paddingHorizontal: 12 },
   card: { width: '100%' },
 });

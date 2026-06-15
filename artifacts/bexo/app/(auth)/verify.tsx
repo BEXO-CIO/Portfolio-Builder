@@ -25,6 +25,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import { typography, shadow } from '@/constants/theme';
 import { useAuthStore } from '@/stores/useAuthStore';
+import { Dimensions } from 'react-native';
+import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
+
+const { width } = Dimensions.get('window');
+const availableWidth = width - 40 - 48; // screen margin (20*2) + card padding (24*2)
+const dynamicCellSize = Math.floor((availableWidth - 5 * 8) / 6);
+const CELL_SIZE = Math.min(dynamicCellSize, 50); // cap at 50
 
 const CODE_LENGTH = 6;
 
@@ -208,8 +215,16 @@ export default function VerifyScreen() {
       return;
     }
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    // Navigate to Google verification (step 2)
-    router.replace('/(auth)/verify-email');
+    
+    // Check if the user is already fully onboarded (existing user)
+    const session = useAuthStore.getState().session;
+    if (session?.emailVerified) {
+      // Go to root index to handle onboarding vs dashboard routing
+      router.replace('/');
+    } else {
+      // Navigate to Google verification (step 2) for new users
+      router.replace('/(auth)/verify-email');
+    }
   };
 
   const handleResend = async () => {
@@ -223,33 +238,41 @@ export default function VerifyScreen() {
   };
 
   return (
-    <View style={[styles.root, { backgroundColor: colors.background }]}>
-      {/* Gradient header */}
-      <LinearGradient
-        colors={colors.gradientHero}
-        style={[styles.header, { paddingTop: insets.top + 16 }]}
-        start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      <KeyboardAwareScrollViewCompat
+        contentContainerStyle={{ flexGrow: 1, paddingBottom: 40 }}
+        showsVerticalScrollIndicator={false}
+        bottomOffset={Platform.OS === 'ios' ? 20 : 0}
       >
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} hitSlop={12}>
-          <Text style={styles.backText}>← Back</Text>
-        </TouchableOpacity>
+        {/* Gradient header */}
+        <LinearGradient
+          colors={colors.gradientHero}
+          style={[styles.header, { paddingTop: insets.top + 16 }]}
+          start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+        >
+          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} hitSlop={12}>
+            <Text style={styles.backText}>← Back</Text>
+          </TouchableOpacity>
 
-        <View style={styles.headerContent}>
-          <Text style={styles.headerTitle}>Check your SMS</Text>
-          <View style={styles.phonePill}>
-            <Text style={styles.phonePillText}>{maskPhone(phoneNumber)}</Text>
+          <View style={styles.headerContent}>
+            <Text style={styles.headerTitle}>Check your SMS</Text>
+            <View style={styles.phonePill}>
+              <Text style={styles.phonePillText}>{maskPhone(phoneNumber)}</Text>
+            </View>
+            <Text style={styles.headerSub}>
+              Enter the 6-digit code sent to your number
+            </Text>
+            <TouchableOpacity onPress={() => router.back()} style={styles.wrongNumberBtn} hitSlop={8}>
+              <Text style={styles.wrongNumberText}>Wrong number? Edit</Text>
+            </TouchableOpacity>
           </View>
-          <Text style={styles.headerSub}>
-            Enter the 6-digit code sent to your number
-          </Text>
-        </View>
 
-        {/* Step dots */}
-        <View style={styles.stepDots}>
-          <View style={[styles.dot, styles.dotActive]} />
-          <View style={[styles.dot, styles.dotInactive]} />
-        </View>
-      </LinearGradient>
+          {/* Step dots */}
+          <View style={styles.stepDots}>
+            <View style={[styles.dot, styles.dotActive]} />
+            <View style={[styles.dot, styles.dotInactive]} />
+          </View>
+        </LinearGradient>
 
       {/* OTP card */}
       <View style={[styles.card, { backgroundColor: colors.surface, ...shadow.lg }]}>
@@ -279,19 +302,6 @@ export default function VerifyScreen() {
               </Animated.View>
             ) : null}
 
-            {/* Dev hint */}
-            {__DEV__ && (
-              <Animated.View
-                entering={FadeInDown.delay(200).springify()}
-                style={[styles.devHint, { backgroundColor: colors.warningLight, borderColor: colors.warning + '30' }]}
-              >
-                <Text style={[typography.caption, { color: colors.warning, textAlign: 'center', lineHeight: 18 }]}>
-                  Dev: enter <Text style={{ fontFamily: 'DMSans_700Bold' }}>000000</Text> for any number{'\n'}
-                  or <Text style={{ fontFamily: 'DMSans_700Bold' }}>001234</Text> for +91 9999999999
-                </Text>
-              </Animated.View>
-            )}
-
             {/* Resend */}
             <View style={styles.resendRow}>
               {resent ? (
@@ -312,11 +322,10 @@ export default function VerifyScreen() {
           </>
         )}
       </View>
+      </KeyboardAwareScrollViewCompat>
     </View>
   );
 }
-
-const CELL_SIZE = 50;
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
@@ -341,6 +350,8 @@ const styles = StyleSheet.create({
   },
   phonePillText: { fontFamily: 'DMSans_600SemiBold', fontSize: 15, color: '#FFFFFF' },
   headerSub: { fontFamily: 'DMSans_400Regular', fontSize: 14, color: 'rgba(255,255,255,0.7)', lineHeight: 20 },
+  wrongNumberBtn: { marginTop: 8 },
+  wrongNumberText: { fontFamily: 'DMSans_500Medium', fontSize: 13, color: 'rgba(255,255,255,0.55)', textDecorationLine: 'underline' },
   stepDots: { flexDirection: 'row', gap: 8 },
   dot: { width: 28, height: 4, borderRadius: 2 },
   dotActive: { backgroundColor: '#FFFFFF' },

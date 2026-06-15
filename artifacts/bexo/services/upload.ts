@@ -9,6 +9,16 @@ export async function uploadAvatar(
     const response = await fetch(localUri);
     const blob = await response.blob();
     
+    // File size validation (max 10MB)
+    if (blob.size > 10 * 1024 * 1024) {
+      return { url: null, error: 'File size must be less than 10MB' };
+    }
+
+    // File type validation
+    if (!blob.type.startsWith('image/')) {
+      return { url: null, error: 'Avatar must be an image' };
+    }
+    
     // We store it as avatar.jpg or maintain the original extension. 
     // Assuming standard upload to users/{userId}/avatar.jpg
     const fileRef = ref(storage, `users/${userId}/avatar.jpg`);
@@ -33,6 +43,16 @@ export async function uploadFile(
     const response = await fetch(localUri);
     const blob = await response.blob();
     
+    // File size validation (max 10MB)
+    if (blob.size > 10 * 1024 * 1024) {
+      return { url: null, error: 'File size must be less than 10MB' };
+    }
+
+    // File type validation (images or pdf)
+    if (!blob.type.startsWith('image/') && blob.type !== 'application/pdf') {
+      return { url: null, error: 'Only images or PDFs are allowed' };
+    }
+
     const name = filename || `${Date.now()}`;
     const fileRef = ref(storage, `users/${userId}/${folder}/${name}`);
     

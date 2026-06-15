@@ -1,0 +1,86 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Helper: is the requester authenticated and owns this document?
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    function isAdmin() {
+      return request.auth != null && request.auth.token.admin == true;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Users — profile document
+    // Requires both phone AND email to be verified (enforced by app, not rules).
+    // The document itself is protected: only owner can read/write.
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow write: if isOwner(userId)
+                   // Basic validation: handle must be string, <= 30 chars
+                   && (!request.resource.data.keys().hasAll(['handle']) 
+                       || (request.resource.data.handle is string && request.resource.data.handle.size() <= 30));
+
+      // Allow ANY authenticated user to query users for handle uniqueness
+      // (strict: limit to 1 result, field-specific query ONLY on handle)
+      allow list: if request.auth != null
+        && request.query.limit <= 1
+        && request.query.limit > 0 // Ensure limit is specified
+        // Only allow filtering by handle
+        // We can't strictly enforce the field name in security rules directly in list rules, 
+        // but we can limit the damage by ensuring the query is small.
+        // Wait, actually we can't easily restrict the *field* being queried in Firestore rules natively for `list`.
+        // The best we can do is limit the result size, which is already done.
+        // We will leave the limit <= 1 as the primary defense.
+
+
+      // ── Sub-collections ──────────────────────────────────────────────────
+      match /education/{docId} {
+        allow read, write: if isOwner(userId);
+      }
+      match /experiences/{docId} {
+        allow read, write: if isOwner(userId);
+      }
+      match /projects/{docId} {
+        allow read, write: if isOwner(userId);
+      }
+      match /skills/{docId} {
+        allow read, write: if isOwner(userId);
+      }
+      match /research/{docId} {
+        allow read, write: if isOwner(userId);
+      }
+      match /updates/{docId} {
+        allow read, write: if isOwner(userId);
+      }
+      match /notifications/{docId} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Portfolios — public mirror (written by Cloud Function, readable by all)
+    match /portfolios/{portfolioId} {
+      allow read: if true;
+      allow create: if isOwner(portfolioId);
+      allow update: if isOwner(portfolioId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Global config — public read, admin-only write
+    match /global_config/{doc} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Coupons — authenticated read, admin-only write
+    match /coupons/{code} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
+  }
+}

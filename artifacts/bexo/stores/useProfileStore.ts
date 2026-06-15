@@ -1,8 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import type { Unsubscribe, DocumentData } from 'firebase/firestore';
+import { type Unsubscribe, writeBatch, doc } from 'firebase/firestore';
 
+import { useAuthStore } from './useAuthStore';
 import {
   upsertUser,
   updateUserFields,
@@ -14,6 +15,7 @@ import {
   subscribeToProfile,
   subscribeToSubCollection,
 } from '@/services/firestoreService';
+import { db } from '@/services/firebase';
 
 export type OnboardingStep =
   | 'email'
@@ -59,6 +61,9 @@ export type Project = {
   live_url?: string;
   github_url?: string;
   image_url?: string;
+  image_urls?: string[];
+  pdf_urls?: string[];
+  link_urls?: string[];
 };
 
 export type Research = {
@@ -89,6 +94,7 @@ export type Profile = {
   website?: string;
   linkedin_url?: string;
   github_url?: string;
+  custom_links?: { id: string; label: string; url: string }[];
   resume_url?: string;
   email?: string;
   phone?: string;
@@ -149,6 +155,9 @@ export type Update = {
   image_url?: string;
   pdf_url?: string;
   link_url?: string;
+  image_urls?: string[];
+  pdf_urls?: string[];
+  link_urls?: string[];
 
   // Role specific
   company_name?: string;
@@ -163,6 +172,15 @@ export type Update = {
   percentage?: string;
 };
 
+export type BexoNotification = {
+  id: string;
+  title: string;
+  description: string;
+  type: 'info' | 'success' | 'warning' | 'view' | 'build';
+  created_at: string;
+  is_read: boolean;
+};
+
 type ProfileStore = {
   profile: Profile | null;
   education: Education[];
@@ -171,6 +189,7 @@ type ProfileStore = {
   skills: Skill[];
   research: Research[];
   updates: Update[];
+  notifications: BexoNotification[];
   isLoading: boolean;
   onboardingStep: OnboardingStep;
   manualReviewStepIndex: number;
@@ -210,22 +229,30 @@ type ProfileStore = {
   removeResearch: (id: string) => void;
 
   addUpdate: (u: Omit<Update, 'id' | 'created_at'>) => void;
+  updateUpdate: (id: string, u: Partial<Update>) => void;
   removeUpdate: (id: string) => void;
+
+  addNotification: (title: string, description: string, type: BexoNotification['type']) => void;
+  markNotificationRead: (id: string) => void;
+  markAllNotificationsRead: () => Promise<void>;
+  clearAllNotifications: () => Promise<void>;
 
   reset: () => void;
 };
 
 
 const COMPLETENESS_WEIGHTS = {
-  identity: 15,   // full_name + handle + avatar_url
+  identity: 20,   // full_name + handle + avatar_url
   bio: 15,        // headline + bio + location
-  contact: 10,    // email + phone_verified
   education: 15,
   experience: 15,
   projects: 15,
   skills: 10,
-  preferences: 5, // theme + font
+  preferences: 10, // theme + font
 } as const;
+
+// Track if we've already done an upsert in this sync session to prevent infinite loops
+let hasUpsertedThisSession = false;
 
 export const useProfileStore = create<ProfileStore>()(
   persist(
@@ -237,8 +264,9 @@ export const useProfileStore = create<ProfileStore>()(
       skills: [],
       research: [],
       updates: [],
+      notifications: [],
       isLoading: false,
-      onboardingStep: 'email',
+      onboardingStep: 'photo',
       manualReviewStepIndex: 0,
       parsedResumeData: null,
       _unsubs: [],
@@ -249,15 +277,158 @@ export const useProfileStore = create<ProfileStore>()(
 
         if (uid.startsWith('dev-')) {
           // Dev mode users aren't authenticated with Firebase, so Firestore will reject.
+          // But we still need a profile!
+          const { profile } = get();
+          const authSession = useAuthStore.getState().session;
+          const fallbackPhone = authSession?.user.phone ?? '';
+          const fallbackEmail = authSession?.user.email ?? '';
+          const fallbackName = authSession?.user.displayName ?? '';
+
+          if (!profile || profile.user_id !== uid) {
+            const newProfile: Profile = {
+              id: makeId(),
+              user_id: uid,
+              handle: 'devuser',
+              full_name: fallbackName || 'Dev User',
+              headline: 'Software Engineer',
+              bio: 'A passionate developer building the next generation of web applications.',
+              location: 'San Francisco, CA',
+              phone: fallbackPhone,
+              email: fallbackEmail,
+              phone_verified: true,
+              email_verified: true,
+              is_published: false,
+              portfolio_theme: 'default',
+              portfolio_font: 'modern',
+              identity_card_palette: 'midnight',
+              identity_card_template: 'standard',
+              custom_links: [],
+            };
+            set({ profile: newProfile });
+          } else {
+            // Update email, phone, name if they are empty
+            set((s) => ({
+              profile: s.profile ? {
+                ...s.profile,
+                full_name: s.profile.full_name || fallbackName || 'Dev User',
+                phone: s.profile.phone || fallbackPhone,
+                email: s.profile.email || fallbackEmail,
+              } : null
+            }));
+          }
+
+          // Dev mode default mock notifications
+          set({
+            notifications: [
+              {
+                id: 'welcome',
+                title: 'Welcome to Bexo!',
+                description: 'Complete your profile to 90% to build and publish your portfolio site.',
+                type: 'info',
+                created_at: new Date().toISOString(),
+                is_read: false,
+              },
+              {
+                id: 'resume-parse',
+                title: 'Resume Parsed Successfully',
+                description: 'Your resume has been processed and your profile fields are prefilled.',
+                type: 'success',
+                created_at: new Date(Date.now() - 3600000).toISOString(),
+                is_read: true,
+              }
+            ]
+          });
+
           return;
         }
 
+        hasUpsertedThisSession = false;
         const unsubs: Unsubscribe[] = [];
 
         // 1. Profile
         unsubs.push(subscribeToProfile(uid, (data) => {
           if (data) {
-            set((s) => ({ profile: { ...s.profile, ...(data as any), user_id: uid } }));
+            const authSession = useAuthStore.getState().session;
+            const fallbackPhone = authSession?.user.phone ?? '';
+            const fallbackEmail = authSession?.user.email ?? '';
+            const fallbackName = authSession?.user.displayName ?? '';
+            const fallbackAvatar = authSession?.user.photoURL ?? '';
+
+            const mergedProfile: Profile = {
+              id: data.id || makeId(),
+              user_id: uid,
+              handle: data.handle || '',
+              full_name: data.full_name || data.displayName || fallbackName || '',
+              headline: data.headline || '',
+              bio: data.bio || '',
+              phone: data.phone || fallbackPhone,
+              email: data.email || fallbackEmail,
+              phone_verified: data.phone_verified ?? data.phoneVerified ?? true,
+              email_verified: data.email_verified ?? data.emailVerified ?? true,
+              is_published: data.is_published ?? false,
+              portfolio_theme: data.portfolio_theme || 'default',
+              portfolio_font: data.portfolio_font || 'modern',
+              identity_card_palette: data.identity_card_palette || 'midnight',
+              identity_card_template: data.identity_card_template || 'standard',
+              avatar_url: data.avatar_url || data.photoURL || fallbackAvatar || undefined,
+              linkedin_url: data.linkedin_url || undefined,
+              github_url: data.github_url || undefined,
+              custom_links: data.custom_links || [],
+              location: data.location || undefined,
+              website: data.website || undefined,
+              resume_url: data.resume_url || undefined,
+              dob: data.dob || undefined,
+              website_preference: data.website_preference || undefined,
+              identity_card_font: data.identity_card_font || undefined,
+            };
+
+            // If some fields were missing in firestore, let's save them so they're in firestore too!
+            const needsUpsert = 
+              !('id' in data) || 
+              !('portfolio_theme' in data) || 
+              !('portfolio_font' in data) || 
+              !('phone' in data) || 
+              !('email' in data) || 
+              !('full_name' in data) || 
+              !('email_verified' in data);
+            
+            if (needsUpsert && !hasUpsertedThisSession) {
+              hasUpsertedThisSession = true;
+              upsertUser(uid, mergedProfile).catch((err) => {
+                console.warn('Failed to upsert missing profile fields:', err);
+              });
+            }
+
+            set({ profile: mergedProfile });
+          } else {
+            // No profile document in firestore at all! Create one using auth session data
+            const authSession = useAuthStore.getState().session;
+            const fallbackPhone = authSession?.user.phone ?? '';
+            const fallbackEmail = authSession?.user.email ?? '';
+            const fallbackName = authSession?.user.displayName ?? '';
+            const fallbackAvatar = authSession?.user.photoURL ?? '';
+
+            const newProfile: Profile = {
+              id: makeId(),
+              user_id: uid,
+              handle: '',
+              full_name: fallbackName,
+              headline: '',
+              bio: '',
+              phone: fallbackPhone,
+              email: fallbackEmail,
+              phone_verified: true,
+              email_verified: true,
+              is_published: false,
+              portfolio_theme: 'default',
+              portfolio_font: 'modern',
+              identity_card_palette: 'midnight',
+              identity_card_template: 'standard',
+              avatar_url: fallbackAvatar || undefined,
+              custom_links: [],
+            };
+            upsertUser(uid, newProfile).catch(console.warn);
+            set({ profile: newProfile });
           }
         }));
 
@@ -268,6 +439,27 @@ export const useProfileStore = create<ProfileStore>()(
         unsubs.push(subscribeToSubCollection(uid, 'skills', (docs) => set({ skills: docs as Skill[] })));
         unsubs.push(subscribeToSubCollection(uid, 'research', (docs) => set({ research: docs as Research[] })));
         unsubs.push(subscribeToSubCollection(uid, 'updates', (docs) => set({ updates: docs as Update[] })));
+        unsubs.push(subscribeToSubCollection(uid, 'notifications', (docs) => {
+          const sorted = (docs as BexoNotification[]).sort(
+            (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          );
+          if (sorted.length === 0) {
+            const defaultNotifs: BexoNotification[] = [
+              {
+                id: 'welcome',
+                title: 'Welcome to Bexo!',
+                description: 'Complete your profile to 90% to build and publish your portfolio site.',
+                type: 'info',
+                created_at: new Date().toISOString(),
+                is_read: false,
+              }
+            ];
+            defaultNotifs.forEach(n => addSubItem(uid, 'notifications', n.id, n).catch(console.warn));
+            set({ notifications: defaultNotifs });
+          } else {
+            set({ notifications: sorted });
+          }
+        }));
 
         set({ _unsubs: unsubs });
       },
@@ -302,8 +494,10 @@ export const useProfileStore = create<ProfileStore>()(
           const allowedKeys = [
             'full_name', 'handle', 'headline', 'bio', 'avatar_url',
             'location', 'website', 'linkedin_url', 'github_url',
+            'custom_links',
             'email', 'is_published', 'portfolio_theme', 'portfolio_font',
-            'email_verified',
+            'email_verified', 'dob', 'resume_url', 'website_preference',
+            'identity_card_font', 'phone', 'phone_verified'
           ] as const;
           for (const key of allowedKeys) {
             if (key in partial) syncFields[key] = (partial as any)[key];
@@ -384,11 +578,8 @@ export const useProfileStore = create<ProfileStore>()(
         if (hasIdentity) score += COMPLETENESS_WEIGHTS.identity;
 
         const hasBio =
-          !!(profile.headline && profile.bio && profile.bio.length >= 20 && profile.location);
+          !!(profile.headline && profile.bio && profile.bio.trim().length > 0 && profile.location);
         if (hasBio) score += COMPLETENESS_WEIGHTS.bio;
-
-        const hasContact = !!(profile.email && profile.phone_verified);
-        if (hasContact) score += COMPLETENESS_WEIGHTS.contact;
 
         if (education.length >= 1) score += COMPLETENESS_WEIGHTS.education;
         if (experiences.length >= 1) score += COMPLETENESS_WEIGHTS.experience;
@@ -509,6 +700,83 @@ export const useProfileStore = create<ProfileStore>()(
         set((s) => ({ updates: s.updates.filter((u) => u.id !== id) }));
         if (uid) deleteSubItem(uid, 'updates', id).catch(console.warn);
       },
+      updateUpdate: (id, u) => {
+        const uid = get().profile?.user_id;
+        set((s) => ({
+          updates: s.updates.map((item) =>
+            item.id === id ? { ...item, ...u } : item
+          ) as Update[],
+        }));
+        if (uid) updateSubItem(uid, 'updates', id, u).catch(console.warn);
+      },
+
+      addNotification: (title, description, type) => {
+        const id = makeId();
+        const uid = get().profile?.user_id;
+        const newNotif: BexoNotification = {
+          id,
+          title,
+          description,
+          type,
+          created_at: new Date().toISOString(),
+          is_read: false,
+        };
+        
+        if (uid && !uid.startsWith('dev-')) {
+          addSubItem(uid, 'notifications', id, newNotif).catch(console.warn);
+        } else {
+          set((s) => ({ notifications: [newNotif, ...s.notifications] }));
+        }
+      },
+      
+      markNotificationRead: (id) => {
+        const uid = get().profile?.user_id;
+        if (uid && !uid.startsWith('dev-')) {
+          updateSubItem(uid, 'notifications', id, { is_read: true }).catch(console.warn);
+        } else {
+          set((s) => ({
+            notifications: s.notifications.map((n) =>
+              n.id === id ? { ...n, is_read: true } : n
+            ),
+          }));
+        }
+      },
+      
+      markAllNotificationsRead: async () => {
+        const { notifications, profile } = get();
+        if (!profile?.user_id) return;
+        
+        const unread = notifications.filter(n => !n.is_read);
+        if (unread.length === 0) return;
+
+        const batch = writeBatch(db);
+        for (const n of unread) {
+          batch.update(doc(db, 'users', profile.user_id, 'notifications', n.id), { is_read: true });
+        }
+        
+        try {
+          await batch.commit();
+        } catch (err) {
+          console.error('[ProfileStore] markAllNotificationsRead failed:', err);
+        }
+      },
+      
+      clearAllNotifications: async () => {
+        const { notifications, profile } = get();
+        if (!profile?.user_id) return;
+        if (notifications.length === 0) return;
+
+        const batch = writeBatch(db);
+        for (const n of notifications) {
+          batch.delete(doc(db, 'users', profile.user_id, 'notifications', n.id));
+        }
+        
+        try {
+          await batch.commit();
+        } catch (err) {
+          console.error('[ProfileStore] clearAllNotifications failed:', err);
+        }
+      },
 
       reset: () => {
         const { stopSync } = get();
@@ -521,7 +789,8 @@ export const useProfileStore = create<ProfileStore>()(
           skills: [],
           research: [],
           updates: [],
-          onboardingStep: 'email',
+          notifications: [],
+          onboardingStep: 'photo',
           parsedResumeData: null,
         });
       },

@@ -37,18 +37,26 @@ const GOOGLE_IOS_CLIENT_ID =
 const GOOGLE_ANDROID_CLIENT_ID =
   '860803616355-REPLACE_WITH_YOUR_ANDROID_CLIENT_ID.apps.googleusercontent.com';
 
-export { GOOGLE_WEB_CLIENT_ID, GOOGLE_IOS_CLIENT_ID, GOOGLE_ANDROID_CLIENT_ID };
+
+// Export these so they can be used consistently across the app
+export const GOOGLE_CLIENT_IDS = {
+  web: '860803616355-fr9uc2gp3em7n9c99gqoccp2homoj09l.apps.googleusercontent.com',
+  ios: '860803616355-fr9uc2gp3em7n9c99gqoccp2homoj09l.apps.googleusercontent.com',
+  android: '860803616355-fr9uc2gp3em7n9c99gqoccp2homoj09l.apps.googleusercontent.com',
+};
 
 /**
  * Hook-based Google auth request builder.
  * Use this hook inside a component to get the `request` and `promptAsync`.
  */
-export function useGoogleAuthRequest() {
+export function useGoogleAuth() {
   const [request, response, promptAsync] = Google.useAuthRequest({
-    clientId: GOOGLE_WEB_CLIENT_ID,
-    iosClientId: GOOGLE_IOS_CLIENT_ID,
-    androidClientId: GOOGLE_ANDROID_CLIENT_ID,
-    redirectUri: makeRedirectUri({ scheme: 'com.mybexo.app' }),
+    clientId: GOOGLE_CLIENT_IDS.web,
+    iosClientId: GOOGLE_CLIENT_IDS.ios,
+    androidClientId: GOOGLE_CLIENT_IDS.android,
+    redirectUri: makeRedirectUri({
+      scheme: 'com.mybexo.app',
+    }),
   });
 
   return { request, response, promptAsync };

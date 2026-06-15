@@ -1,67 +1,70 @@
+import { uploadFile } from '@/services/upload';
 import type { ParsedResume } from '@/stores/useProfileStore';
-
-const MOCK_RESUME: ParsedResume = {
-  headline: 'Full-Stack Software Engineer',
-  bio: 'Computer Science student passionate about building products that make a difference. I love clean code, thoughtful design, and shipping things people actually use.',
-  location: 'San Francisco, CA',
-  education: [
-    {
-      institution: 'University of California, Berkeley',
-      degree: 'B.S.',
-      field: 'Computer Science',
-      start_year: 2021,
-      end_year: 2025,
-      gpa: '3.8',
-    },
-  ],
-  experiences: [
-    {
-      company: 'Stripe',
-      role: 'Software Engineering Intern',
-      start_date: '2024-06-01',
-      end_date: '2024-08-01',
-      description: 'Built internal tooling for payment reconciliation using React and Go. Reduced processing time by 40%.',
-      is_current: false,
-    },
-    {
-      company: 'Berkeley AI Research',
-      role: 'Undergraduate Researcher',
-      start_date: '2023-01-01',
-      description: 'Contributed to NLP research on low-resource language models.',
-      is_current: true,
-    },
-  ],
-  projects: [
-    {
-      title: 'Clarit',
-      description: 'An AI-powered study tool that turns lecture notes into spaced-repetition flashcards. 500+ active users.',
-      tech_stack: ['React', 'TypeScript', 'OpenAI', 'Supabase'],
-      live_url: 'https://clarit.app',
-      github_url: 'https://github.com/example/clarit',
-    },
-    {
-      title: 'Pulse Dashboard',
-      description: 'Real-time analytics dashboard for indie SaaS founders. Aggregates Stripe, Posthog, and GitHub data.',
-      tech_stack: ['Next.js', 'Recharts', 'PostgreSQL'],
-      github_url: 'https://github.com/example/pulse',
-    },
-  ],
-  skills: [
-    { name: 'TypeScript', category: 'Languages', level: 'advanced' },
-    { name: 'React', category: 'Frontend', level: 'advanced' },
-    { name: 'Python', category: 'Languages', level: 'intermediate' },
-    { name: 'Node.js', category: 'Backend', level: 'intermediate' },
-    { name: 'PostgreSQL', category: 'Databases', level: 'intermediate' },
-    { name: 'Go', category: 'Languages', level: 'beginner' },
-  ],
-};
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export async function uploadAndParseResume(
-  _fileUri: string,
-  _userId: string
-): Promise<{ data: ParsedResume | null; error: string | null }> {
-  await new Promise((r) => setTimeout(r, 2200));
-  return { data: MOCK_RESUME, error: null };
+  fileUri: string,
+  userId: string,
+  filename?: string
+): Promise<{ data: ParsedResume | null; url: string | null; error: string | null }> {
+  try {
+    const { url, error: uploadError } = await uploadFile(userId, fileUri, 'resumes', filename || 'resume.pdf');
+    if (uploadError || !url) {
+      return { data: null, url: null, error: uploadError || 'Failed to upload resume' };
+    }
+
+    const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new Error('Gemini API key is not configured');
+    }
+
+    // Read local file as base64 for Gemini inline data
+    const response = await fetch(fileUri);
+    const blob = await response.blob();
+    const base64Data = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const dataUrl = reader.result as string;
+        resolve(dataUrl.split(',')[1]);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+    const prompt = `You are an expert resume parser. Extract the resume information into a structured JSON object exactly matching this interface:
+{
+  "headline": "string (optional short professional headline)",
+  "bio": "string (optional professional summary)",
+  "location": "string (optional)",
+  "education": [{"institution": "string", "degree": "string", "field": "string", "start_year": number, "end_year": number (optional), "gpa": "string (optional)"}],
+  "experiences": [{"company": "string", "role": "string", "start_date": "string YYYY-MM-DD", "end_date": "string YYYY-MM-DD (optional)", "description": "string", "is_current": boolean}],
+  "projects": [{"title": "string", "description": "string", "tech_stack": ["string"]}],
+  "skills": [{"name": "string", "category": "string (optional)", "level": "beginner|intermediate|advanced|expert"}]
+}
+Return ONLY valid JSON without any markdown formatting or backticks.`;
+
+    const result = await model.generateContent([
+      prompt,
+      {
+        inlineData: {
+          data: base64Data,
+          mimeType: "application/pdf"
+        }
+      }
+    ]);
+
+    const text = result.response.text();
+    const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    const parsedData = JSON.parse(cleanText) as ParsedResume;
+
+    return { data: parsedData, url, error: null };
+  } catch (err: any) {
+    console.error('[ResumeParser] error:', err);
+    return { data: null, url: null, error: err.message || 'Upload or parse failed' };
+  }
 }
 
 export function friendlyResumeAiError(err: unknown): string {
@@ -69,6 +72,7 @@ export function friendlyResumeAiError(err: unknown): string {
     if (err.includes('timeout')) return 'The parse took too long. Please try again.';
     if (err.includes('PDF')) return 'Could not read this PDF. Make sure it has selectable text.';
     if (err.includes('rate')) return 'AI is busy right now. Please wait a moment and retry.';
+    if (err.includes('configured')) return 'AI services are currently unconfigured on the server.';
   }
   return 'Could not parse your resume. You can fill in your details manually instead.';
 }

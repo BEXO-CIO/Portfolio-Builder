@@ -1,5 +1,6 @@
+import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, Modal, Pressable, RefreshControl } from 'react-native';
 import Animated, { FadeInDown, FadeIn, FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,6 +13,7 @@ import { typography, radius, spacing } from '@/constants/theme';
 import { useProfileStore, Update } from '@/stores/useProfileStore';
 import { parseUpdateText } from '@/services/achievementParser';
 import { BexoButton } from '@/components/BexoButton';
+import { DatePickerSheet } from '@/components/PickerSheets';
 import { uploadFile } from '@/services/upload';
 import { Image } from 'expo-image';
 
@@ -24,11 +26,9 @@ const TYPE_OPTIONS: { key: UpdateType; label: string; placeholder: string }[] = 
   { key: 'education', label: 'Education', placeholder: 'Graduated from UC Berkeley with a B.S. in CS' },
 ];
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const YEARS = Array.from({length: 40}, (_, i) => new Date().getFullYear() + 5 - i); // From 5 years in future to 35 in past
-
 export default function UpdateScreen() {
   const colors = useColors();
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const { addUpdate, updates, profile } = useProfileStore();
   const [type, setType] = useState<UpdateType>('achievement');
@@ -54,12 +54,19 @@ export default function UpdateScreen() {
 
   const [isPosting, setIsPosting] = useState(false);
   const [posted, setPosted] = useState(false);
+  const [userPickedType, setUserPickedType] = useState(false);
+  const postedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Clean up posted banner timer on unmount
+  useEffect(() => {
+    return () => {
+      if (postedTimerRef.current) clearTimeout(postedTimerRef.current);
+    };
+  }, []);
 
   // Picker State
   const [pickerVisible, setPickerVisible] = useState(false);
   const [pickerTarget, setPickerTarget] = useState<'start' | 'end' | null>(null);
-  const [tempMonth, setTempMonth] = useState(MONTHS[new Date().getMonth()]);
-  const [tempYear, setTempYear] = useState(new Date().getFullYear().toString());
 
   const currentPlaceholder = TYPE_OPTIONS.find((t) => t.key === type)?.placeholder ?? '';
   const topPad = Platform.OS === 'web' ? 67 : insets.top + 12;
@@ -75,7 +82,7 @@ export default function UpdateScreen() {
 
   const pickImage = async () => {
     let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
       allowsEditing: true,
       quality: 0.8,
     });
@@ -96,29 +103,14 @@ export default function UpdateScreen() {
     }
   };
 
-  const openPicker = (target: 'start' | 'end', currentVal: string) => {
+  const openPicker = (target: 'start' | 'end') => {
     setPickerTarget(target);
-    if (currentVal) {
-      const parts = currentVal.split(' ');
-      if (parts.length === 2 && MONTHS.includes(parts[0])) {
-        setTempMonth(parts[0]);
-        setTempYear(parts[1]);
-      } else if (parts.length === 1 && parts[0].length === 4) {
-        setTempMonth('Jan');
-        setTempYear(parts[0]);
-      }
-    } else {
-      setTempMonth(MONTHS[new Date().getMonth()]);
-      setTempYear(new Date().getFullYear().toString());
-    }
     setPickerVisible(true);
   };
 
-  const confirmPicker = () => {
-    const formatted = type === 'education' ? tempYear : `${tempMonth} ${tempYear}`;
+  const handlePickerConfirm = (formatted: string) => {
     if (pickerTarget === 'start') setStartDate(formatted);
     if (pickerTarget === 'end') setEndDate(formatted);
-    setPickerVisible(false);
   };
 
   const handlePost = async () => {
@@ -176,14 +168,17 @@ export default function UpdateScreen() {
     setInstitutionName('');
     setSpecialization('');
     setPercentage('');
+    setUserPickedType(false);
 
     setIsPosting(false);
     setPosted(true);
-    setTimeout(() => setPosted(false), 3000);
+    if (postedTimerRef.current) clearTimeout(postedTimerRef.current);
+    postedTimerRef.current = setTimeout(() => setPosted(false), 3000);
   };
 
   const handleAutoDetect = () => {
-    if (!title.trim()) return;
+    // Only auto-detect if user hasn't manually picked a type
+    if (!title.trim() || userPickedType) return;
     const parsed = parseUpdateText(title);
     setType(parsed.type);
   };
@@ -252,7 +247,7 @@ export default function UpdateScreen() {
           />
           <View style={{ flexDirection: 'row', gap: 12 }}>
             <TouchableOpacity
-              onPress={() => openPicker('start', startDate)}
+              onPress={() => openPicker('start')}
               style={[styles.input, { flex: 1, backgroundColor: colors.surface, borderColor: colors.border, justifyContent: 'center' }]}
             >
               <Text style={[typography.body, { color: startDate ? colors.foreground : colors.mutedForeground }]}>
@@ -261,7 +256,7 @@ export default function UpdateScreen() {
             </TouchableOpacity>
             {!isCurrent && (
               <TouchableOpacity
-                onPress={() => openPicker('end', endDate)}
+                onPress={() => openPicker('end')}
                 style={[styles.input, { flex: 1, backgroundColor: colors.surface, borderColor: colors.border, justifyContent: 'center' }]}
               >
                 <Text style={[typography.body, { color: endDate ? colors.foreground : colors.mutedForeground }]}>
@@ -306,7 +301,7 @@ export default function UpdateScreen() {
           />
           <View style={{ flexDirection: 'row', gap: 12 }}>
             <TouchableOpacity
-              onPress={() => openPicker('start', startDate)}
+              onPress={() => openPicker('start')}
               style={[styles.input, { flex: 1, backgroundColor: colors.surface, borderColor: colors.border, justifyContent: 'center' }]}
             >
               <Text style={[typography.body, { color: startDate ? colors.foreground : colors.mutedForeground }]}>
@@ -314,7 +309,7 @@ export default function UpdateScreen() {
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
-              onPress={() => openPicker('end', endDate)}
+              onPress={() => openPicker('end')}
               style={[styles.input, { flex: 1, backgroundColor: colors.surface, borderColor: colors.border, justifyContent: 'center' }]}
             >
               <Text style={[typography.body, { color: endDate ? colors.foreground : colors.mutedForeground }]}>
@@ -365,7 +360,7 @@ export default function UpdateScreen() {
                   borderRadius: radius.sm,
                 },
               ]}
-              onPress={() => setType(t.key)}
+              onPress={() => { setType(t.key); setUserPickedType(true); }}
             >
               <Text
                 style={[
@@ -455,74 +450,31 @@ export default function UpdateScreen() {
               RECENT UPDATES
             </Text>
             {updates.slice(0, 5).map((u) => (
-              <View key={u.id} style={[styles.recentRow, { borderBottomColor: colors.border }]}>
+              <TouchableOpacity
+                key={u.id}
+                style={[styles.recentRow, { borderBottomColor: colors.border }]}
+                activeOpacity={0.7}
+                onPress={() => router.push({ pathname: '/edit-item', params: { id: u.id, category: 'update' } })}
+              >
                 <View style={[styles.typeDot, { backgroundColor: colors.primary }]} />
                 <View style={styles.recentText}>
                   <Text style={[typography.body, { color: colors.foreground }]}>{u.title}</Text>
                   <Text style={[typography.caption, { color: colors.mutedForeground }]}>{u.type}</Text>
                 </View>
-              </View>
+                <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+              </TouchableOpacity>
             ))}
           </Animated.View>
         )}
       </ScrollView>
 
-      {/* Date Picker Modal */}
-      <Modal visible={pickerVisible} transparent animationType="slide">
-        <Pressable style={styles.modalOverlay} onPress={() => setPickerVisible(false)}>
-          <Pressable style={[styles.modalContent, { backgroundColor: colors.background }]} onPress={(e) => e.stopPropagation()}>
-            <View style={styles.modalHeader}>
-              <Text style={[typography.h3, { color: colors.foreground }]}>Select Date</Text>
-              <TouchableOpacity onPress={() => setPickerVisible(false)}>
-                <Feather name="x" size={24} color={colors.foreground} />
-              </TouchableOpacity>
-            </View>
-
-            {type !== 'education' && (
-              <>
-                <Text style={[typography.label, { color: colors.mutedForeground, marginTop: 16, marginBottom: 8 }]}>MONTH</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: 4 }}>
-                  {MONTHS.map(m => (
-                    <TouchableOpacity 
-                      key={m} 
-                      onPress={() => setTempMonth(m)}
-                      style={[styles.pickerChip, { 
-                        backgroundColor: tempMonth === m ? colors.primary : colors.surface,
-                        borderColor: tempMonth === m ? colors.primary : colors.border
-                      }]}
-                    >
-                      <Text style={[typography.body, { color: tempMonth === m ? '#fff' : colors.foreground }]}>{m}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </>
-            )}
-
-            <Text style={[typography.label, { color: colors.mutedForeground, marginTop: 24, marginBottom: 8 }]}>YEAR</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: 4 }}>
-              {YEARS.map(y => (
-                <TouchableOpacity 
-                  key={y} 
-                  onPress={() => setTempYear(y.toString())}
-                  style={[styles.pickerChip, { 
-                    backgroundColor: tempYear === y.toString() ? colors.primary : colors.surface,
-                    borderColor: tempYear === y.toString() ? colors.primary : colors.border
-                  }]}
-                >
-                  <Text style={[typography.body, { color: tempYear === y.toString() ? '#fff' : colors.foreground }]}>{y}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-
-            <TouchableOpacity 
-              style={[styles.confirmBtn, { backgroundColor: colors.primary, marginTop: 32 }]} 
-              onPress={confirmPicker}
-            >
-              <Text style={[typography.body, { color: '#fff', fontFamily: 'DMSans_600SemiBold' }]}>Confirm Date</Text>
-            </TouchableOpacity>
-          </Pressable>
-        </Pressable>
-      </Modal>
+      <DatePickerSheet
+        visible={pickerVisible}
+        yearOnly={type === 'education'}
+        value={pickerTarget === 'start' ? startDate : endDate}
+        onConfirm={handlePickerConfirm}
+        onClose={() => setPickerVisible(false)}
+      />
     </>
   );
 }
@@ -547,9 +499,4 @@ const styles = StyleSheet.create({
   pdfPreview: { flexDirection: 'row', alignItems: 'center' },
   removeBtn: { padding: 8 },
   checkbox: { width: 20, height: 20, borderRadius: 4, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalContent: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40 },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  pickerChip: { paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12, borderWidth: 1 },
-  confirmBtn: { paddingVertical: 16, borderRadius: 12, alignItems: 'center' },
 });

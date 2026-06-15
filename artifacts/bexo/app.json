@@ -14,10 +14,12 @@
       "backgroundColor": "#F7F5F0"
     },
     "ios": {
-      "supportsTablet": false
+      "supportsTablet": false,
+      "bundleIdentifier": "com.mybexo.app"
     },
     "android": {
-      "backgroundColor": "#F7F5F0"
+      "backgroundColor": "#F7F5F0",
+      "package": "com.mybexo.app"
     },
     "web": {
       "favicon": "./assets/images/icon.png",
@@ -27,7 +29,7 @@
       [
         "expo-router",
         {
-          "origin": "https://replit.com/"
+          "origin": "https://mybexo.com"
         }
       ],
       "expo-font",
@@ -36,6 +38,11 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "f3faad6f-afc2-4dcd-98e5-995657ff49e9"
+      }
     }
   }
 }

@@ -41,7 +41,7 @@ export function BuildStatusCard({ status, portfolioUrl, buildLog }: Props) {
       ]}
     >
       <View style={styles.row}>
-        {status === 'building' ? (
+        {status === 'BUILDING' ? (
           <ActivityIndicator size="small" color={colors.warning} style={styles.icon} />
         ) : (
           <Feather name={cfg.icon} size={20} color={cfg.color} style={styles.icon} />
@@ -50,7 +50,7 @@ export function BuildStatusCard({ status, portfolioUrl, buildLog }: Props) {
           <Text style={[typography.body, { color: colors.foreground, fontFamily: 'DMSans_600SemiBold' }]}>
             {cfg.label}
           </Text>
-          {portfolioUrl && status === 'done' ? (
+          {portfolioUrl && status === 'DONE' ? (
             <Text style={[typography.bodySm, { color: colors.primary, marginTop: 2 }]}>
               {portfolioUrl}
             </Text>

@@ -3,7 +3,7 @@ import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { Image, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Image, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
 import { useColors } from '@/hooks/useColors';
@@ -34,11 +34,33 @@ export default function PhotoStep() {
     }
   };
 
+  const handleRemovePhoto = () => {
+    setLocalUri(null);
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
   const handleNext = async () => {
     if (localUri && localUri !== profile?.avatar_url) {
       setUploading(true);
-      const { url } = await uploadAvatar(profile?.user_id ?? 'user', localUri);
-      updateProfile({ avatar_url: url ?? localUri });
+      try {
+        const { url } = await uploadAvatar(profile?.user_id ?? 'user', localUri);
+        if (url) {
+          updateProfile({ avatar_url: url });
+        } else {
+          // Upload returned no URL — alert the user rather than silently saving a local file:// path
+          Alert.alert(
+            'Upload failed',
+            'Photo couldn\'t be uploaded. You can continue without one and add it later from settings.',
+            [{ text: 'OK' }]
+          );
+        }
+      } catch (err) {
+        Alert.alert(
+          'Upload error',
+          'Something went wrong uploading your photo. You can try again later from settings.',
+          [{ text: 'OK' }]
+        );
+      }
       setUploading(false);
     }
     setOnboardingStep('handle');
@@ -51,7 +73,7 @@ export default function PhotoStep() {
   };
 
   return (
-    <OnboardingShell step="photo" onBack={() => router.back()}>
+    <OnboardingShell step="photo">
       <ScreenHeader title="Add a photo" subtitle="A clear, friendly photo helps people recognise you." />
       <View style={styles.centered}>
         <TouchableOpacity onPress={pickImage} activeOpacity={0.85}>
@@ -79,6 +101,16 @@ export default function PhotoStep() {
             </View>
           )}
         </TouchableOpacity>
+
+        {/* Remove photo badge */}
+        {localUri ? (
+          <TouchableOpacity onPress={handleRemovePhoto} style={styles.removeRow} activeOpacity={0.7} hitSlop={8}>
+            <Feather name="x" size={14} color={colors.destructive ?? '#EF4444'} />
+            <Text style={[typography.bodySm, { color: colors.destructive ?? '#EF4444', marginLeft: 4 }]}>
+              Remove photo
+            </Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
 
       <View style={styles.footer}>
@@ -110,6 +142,12 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  removeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12,
+    paddingVertical: 4,
   },
   footer: { gap: 8, paddingBottom: 24 },
 });

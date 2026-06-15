@@ -1,8 +1,9 @@
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, StyleSheet, View, TouchableOpacity, Text } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Feather } from '@expo/vector-icons';
 
 import { useColors } from '@/hooks/useColors';
 import { useProfileStore } from '@/stores/useProfileStore';
@@ -20,9 +21,9 @@ export default function EditProfileScreen() {
   const [headline, setHeadline] = useState(profile?.headline ?? '');
   const [bio, setBio] = useState(profile?.bio ?? '');
   const [location, setLocation] = useState(profile?.location ?? '');
-  const [website, setWebsite] = useState(profile?.website ?? '');
   const [linkedin, setLinkedin] = useState(profile?.linkedin_url ?? '');
   const [github, setGithub] = useState(profile?.github_url ?? '');
+  const [customLinks, setCustomLinks] = useState<{ id: string; label: string; url: string }[]>(profile?.custom_links ?? []);
 
   const handleSave = () => {
     updateProfile({
@@ -30,14 +31,18 @@ export default function EditProfileScreen() {
       headline: headline.trim(),
       bio: bio.trim(),
       location: location.trim(),
-      website: website.trim(),
       linkedin_url: linkedin.trim(),
       github_url: github.trim(),
+      custom_links: customLinks.map(l => ({ ...l, label: l.label.trim(), url: l.url.trim() })).filter(l => l.label || l.url),
     });
     router.back();
   };
 
   return (
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      style={{ flex: 1, backgroundColor: colors.background }}
+    >
     <Animated.ScrollView
       style={{ flex: 1, backgroundColor: colors.background }}
       contentContainerStyle={[
@@ -57,25 +62,71 @@ export default function EditProfileScreen() {
         <FormField label="Headline" value={headline} onChangeText={setHeadline} placeholder="Software Engineer · UC Berkeley" />
       </Animated.View>
       <Animated.View entering={FadeInDown.delay(120).springify()}>
-        <FormField label="Bio" value={bio} onChangeText={setBio} placeholder="A few sentences about yourself…" multiline numberOfLines={4} optional />
+        <FormField label="Bio" value={bio} onChangeText={setBio} placeholder="A few sentences about yourself…" multiline numberOfLines={4} />
       </Animated.View>
       <Animated.View entering={FadeInDown.delay(160).springify()}>
-        <FormField label="Location" value={location} onChangeText={setLocation} placeholder="San Francisco, CA" optional />
+        <FormField label="Location" value={location} onChangeText={setLocation} placeholder="San Francisco, CA" />
       </Animated.View>
       <Animated.View entering={FadeInDown.delay(200).springify()}>
-        <FormField label="Website" value={website} onChangeText={setWebsite} placeholder="https://yoursite.com" keyboardType="url" optional />
-      </Animated.View>
-      <Animated.View entering={FadeInDown.delay(240).springify()}>
         <FormField label="LinkedIn" value={linkedin} onChangeText={setLinkedin} placeholder="https://linkedin.com/in/you" keyboardType="url" optional />
       </Animated.View>
-      <Animated.View entering={FadeInDown.delay(280).springify()}>
+      <Animated.View entering={FadeInDown.delay(240).springify()}>
         <FormField label="GitHub" value={github} onChangeText={setGithub} placeholder="https://github.com/you" keyboardType="url" optional />
       </Animated.View>
 
-      <Animated.View entering={FadeInDown.delay(320).springify()} style={{ marginTop: 12 }}>
+      {customLinks.map((link, index) => (
+        <Animated.View key={link.id} entering={FadeInDown.delay(280 + index * 40).springify()} style={{ marginTop: 12 }}>
+          <View style={{ flexDirection: 'row', gap: 12 }}>
+            <View style={{ flex: 1 }}>
+              <FormField 
+                label={`Custom Link ${index + 1}`} 
+                value={link.label} 
+                onChangeText={(t: string) => {
+                  const newLinks = [...customLinks];
+                  newLinks[index].label = t;
+                  setCustomLinks(newLinks);
+                }} 
+                placeholder="e.g. Medium" 
+              />
+            </View>
+            <View style={{ flex: 2 }}>
+              <FormField 
+                label="URL" 
+                value={link.url} 
+                onChangeText={(t: string) => {
+                  const newLinks = [...customLinks];
+                  newLinks[index].url = t;
+                  setCustomLinks(newLinks);
+                }} 
+                placeholder="https://..." 
+                keyboardType="url" 
+              />
+            </View>
+            <TouchableOpacity 
+              onPress={() => setCustomLinks(customLinks.filter(l => l.id !== link.id))}
+              style={{ justifyContent: 'center', alignItems: 'center', marginTop: 26, paddingHorizontal: 4 }}
+            >
+              <Feather name="trash-2" size={20} color={colors.destructive || 'red'} />
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+      ))}
+
+      <Animated.View entering={FadeInDown.delay(400).springify()}>
+        <TouchableOpacity 
+          style={{ flexDirection: 'row', alignItems: 'center', marginTop: 12, paddingVertical: 12 }}
+          onPress={() => setCustomLinks([...customLinks, { id: Date.now().toString(), label: '', url: '' }])}
+        >
+          <Feather name="plus-circle" size={18} color={colors.primary} />
+          <Text style={{ fontFamily: 'DMSans_500Medium', color: colors.primary, marginLeft: 8 }}>Add Custom Link</Text>
+        </TouchableOpacity>
+      </Animated.View>
+
+      <Animated.View entering={FadeInDown.delay(440).springify()} style={{ marginTop: 24 }}>
         <BexoButton label="Save changes" onPress={handleSave} />
       </Animated.View>
     </Animated.ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 

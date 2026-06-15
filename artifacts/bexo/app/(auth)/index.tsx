@@ -3,10 +3,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import React, { useRef, useState } from 'react';
 import {
-  KeyboardAvoidingView,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -20,6 +18,7 @@ import { useColors } from '@/hooks/useColors';
 import { typography, radius, shadow } from '@/constants/theme';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { BexoButton } from '@/components/BexoButton';
+import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 import app from '@/services/firebase';
 
 function formatPhone(raw: string): string {
@@ -66,47 +65,44 @@ export default function LoginScreen() {
         firebaseConfig={app.options}
         attemptInvisibleVerification
       />
-      {/* Hero gradient top section */}
-      <LinearGradient
-        colors={colors.gradientHero}
-        style={[styles.hero, { paddingTop: insets.top + 24 }]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-      >
-        <Animated.View entering={FadeInDown.delay(0).springify()}>
-          {/* Logo mark */}
-          <View style={styles.logoRow}>
-            <View style={[styles.logoDot, { backgroundColor: 'rgba(255,255,255,0.25)' }]} />
-            <Text style={styles.logoText}>bexo</Text>
-          </View>
-        </Animated.View>
-
-        <Animated.View entering={FadeInDown.delay(80).springify()} style={styles.heroText}>
-          <Text style={styles.heroTitle}>Your portfolio,{'\n'}starts with a tap.</Text>
-          <Text style={styles.heroSub}>
-            Step 1 of 2 — Verify your mobile number
-          </Text>
-        </Animated.View>
-
-        {/* Step progress dots */}
-        <Animated.View entering={FadeInDown.delay(140).springify()} style={styles.stepDots}>
-          <View style={[styles.dot, styles.dotActive]} />
-          <View style={[styles.dot, styles.dotInactive]} />
-        </Animated.View>
-      </LinearGradient>
-
       {/* Card panel */}
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.flex}
+      <KeyboardAwareScrollViewCompat
+        contentContainerStyle={{ flexGrow: 1, paddingBottom: insets.bottom + 32 }}
+        showsVerticalScrollIndicator={false}
+        bottomOffset={Platform.OS === 'ios' ? 20 : 0}
       >
-        <ScrollView
-          contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 32 }]}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
+          {/* Hero gradient top section */}
+          <LinearGradient
+            colors={colors.gradientHero}
+            style={[styles.hero, { paddingTop: insets.top + 24 }]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          >
+            <Animated.View entering={FadeInDown.delay(0).springify()}>
+              {/* Logo mark */}
+              <View style={styles.logoRow}>
+                <View style={[styles.logoDot, { backgroundColor: 'rgba(255,255,255,0.25)' }]} />
+                <Text style={styles.logoText}>bexo</Text>
+              </View>
+            </Animated.View>
+
+            <Animated.View entering={FadeInDown.delay(100).springify()} style={styles.heroText}>
+              <Text style={styles.heroTitle}>Your portfolio,{'\n'}starts with a tap.</Text>
+              <Text style={styles.heroSub}>
+                Step 1 of 2 — Verify your mobile number
+              </Text>
+            </Animated.View>
+
+            {/* Step progress dots */}
+            <Animated.View entering={FadeInDown.delay(200).springify()} style={styles.stepDots}>
+              <View style={[styles.dot, styles.dotActive]} />
+              <View style={[styles.dot, styles.dotInactive]} />
+            </Animated.View>
+          </LinearGradient>
+
+          <View style={styles.scroll}>
           <Animated.View
-            entering={FadeInUp.delay(160).springify()}
+            entering={FadeInUp.delay(320).springify()}
             style={[styles.card, { backgroundColor: colors.surface, ...shadow.lg }]}
           >
             <Text style={[typography.h3, { color: colors.foreground, marginBottom: 4 }]}>
@@ -195,7 +191,7 @@ export default function LoginScreen() {
           </Animated.View>
 
           {/* Legal */}
-          <Animated.View entering={FadeInUp.delay(240).springify()} style={styles.legal}>
+          <Animated.View entering={FadeInUp.delay(440).springify()} style={styles.legal}>
             <Text style={[typography.caption, { color: colors.mutedForeground, textAlign: 'center', lineHeight: 18 }]}>
               By continuing you agree to our{' '}
               <Text style={{ color: colors.primary }} onPress={() => router.push('/terms')}>Terms</Text>
@@ -203,18 +199,17 @@ export default function LoginScreen() {
               <Text style={{ color: colors.primary }} onPress={() => router.push('/privacy')}>Privacy Policy</Text>.
             </Text>
           </Animated.View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+          </View>
+      </KeyboardAwareScrollViewCompat>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  flex: { flex: 1 },
   hero: {
     paddingHorizontal: 28,
-    paddingBottom: 32,
+    paddingBottom: 28,
   },
   logoRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 32 },
   logoDot: { width: 10, height: 10, borderRadius: 5 },
@@ -244,7 +239,7 @@ const styles = StyleSheet.create({
   dotActive: { backgroundColor: '#FFFFFF' },
   dotInactive: { backgroundColor: 'rgba(255,255,255,0.30)' },
 
-  scroll: { paddingHorizontal: 20, paddingTop: 24 },
+  scroll: { paddingHorizontal: 20, paddingTop: 24, flex: 1 },
   card: {
     borderRadius: 20,
     padding: 24,

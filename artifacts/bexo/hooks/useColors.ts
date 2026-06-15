@@ -11,6 +11,6 @@ type Palette = typeof colors.light;
 export function useColors(): Palette & { radius: typeof colors.radius; isDark: boolean } {
   const scheme = useColorScheme();
   const isDark = scheme === 'dark';
-  const palette: Palette = isDark ? colors.dark : colors.light;
+  const palette = (isDark ? colors.dark : colors.light) as typeof colors.light;
   return { ...palette, radius: colors.radius, isDark };
 }

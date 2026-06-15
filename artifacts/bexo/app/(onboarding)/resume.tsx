@@ -19,7 +19,7 @@ type Stage = 'idle' | 'uploading' | 'parsing' | 'done' | 'error';
 export default function ResumeStep() {
   const colors = useColors();
   const router = useRouter();
-  const { profile, setParsedResumeData, applyParsedResume, setOnboardingStep } = useProfileStore();
+  const { profile, setParsedResumeData, applyParsedResume, setOnboardingStep, updateProfile } = useProfileStore();
   const [fileName, setFileName] = useState<string | null>(null);
   const [stage, setStage] = useState<Stage>('idle');
   const [errMsg, setErrMsg] = useState('');
@@ -39,11 +39,15 @@ export default function ResumeStep() {
     await new Promise((r) => setTimeout(r, 400));
     setStage('parsing');
 
-    const { data, error } = await uploadAndParseResume(asset.uri, profile?.user_id ?? 'user');
+    const { data, url, error } = await uploadAndParseResume(asset.uri, profile?.user_id ?? 'user', asset.name);
     if (error || !data) {
       setStage('error');
       setErrMsg(friendlyResumeAiError(error ?? 'Unknown'));
       return;
+    }
+
+    if (url) {
+      updateProfile({ resume_url: url });
     }
 
     setParsedResumeData(data);

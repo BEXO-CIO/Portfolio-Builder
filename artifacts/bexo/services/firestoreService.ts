@@ -31,13 +31,59 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 
+/**
+ * Utility to retry Firestore operations with exponential backoff
+ */
+async function withRetry<T>(operation: () => Promise<T>, maxRetries = 3): Promise<T> {
+  let attempt = 0;
+  while (attempt < maxRetries) {
+    try {
+      return await operation();
+    } catch (err: any) {
+      attempt++;
+      if (attempt >= maxRetries) {
+        console.error(`[Firestore] Operation failed after ${maxRetries} attempts:`, err);
+        throw err;
+      }
+      // Wait before retrying (exponential backoff: 500ms, 1000ms, 2000ms)
+      const delay = Math.pow(2, attempt - 1) * 500;
+      console.warn(`[Firestore] Operation failed, retrying in ${delay}ms... (Attempt ${attempt}/${maxRetries})`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+  throw new Error('Unreachable');
+}
+
 // ── User Profile ────────────────────────────────────────────────────────────
 
+function clean(obj: any): any {
+  if (obj === undefined) return null;
+  if (obj === null) return null;
+  if (Array.isArray(obj)) {
+    return obj.map(clean);
+  }
+  if (typeof obj === 'object') {
+    const proto = Object.getPrototypeOf(obj);
+    const isPlain = proto === null || proto === Object.prototype || Object.prototype.toString.call(obj) === '[object Object]';
+    if (isPlain && !(obj instanceof Date) && !(obj instanceof RegExp)) {
+      const res: Record<string, any> = {};
+      for (const key of Object.keys(obj)) {
+        const val = obj[key];
+        if (val !== undefined) {
+          res[key] = clean(val);
+        }
+      }
+      return res;
+    }
+  }
+  return obj;
+}
+
 export async function upsertUser(uid: string, data: Record<string, any>) {
-  await setDoc(doc(db, 'users', uid), {
-    ...data,
+  return withRetry(() => setDoc(doc(db, 'users', uid), {
+    ...clean(data),
     updatedAt: serverTimestamp(),
-  }, { merge: true });
+  }, { merge: true }));
 }
 
 export async function getUserProfile(uid: string): Promise<DocumentData | null> {
@@ -46,10 +92,10 @@ export async function getUserProfile(uid: string): Promise<DocumentData | null> 
 }
 
 export async function updateUserFields(uid: string, fields: Record<string, any>) {
-  await updateDoc(doc(db, 'users', uid), {
-    ...fields,
+  return withRetry(() => updateDoc(doc(db, 'users', uid), {
+    ...clean(fields),
     updatedAt: serverTimestamp(),
-  });
+  }));
 }
 
 /** Real-time listener for the user's profile document */
@@ -81,7 +127,7 @@ export async function checkHandleAvailable(handle: string, currentUid?: string):
 
 // ── Sub-collections (Education, Experience, Projects, Skills, Research) ──────
 
-type SubCollection = 'education' | 'experiences' | 'projects' | 'skills' | 'research';
+type SubCollection = 'education' | 'experiences' | 'projects' | 'skills' | 'research' | 'updates' | 'notifications';
 
 export async function addSubItem(
   uid: string,
@@ -89,11 +135,11 @@ export async function addSubItem(
   id: string,
   data: Record<string, any>
 ) {
-  await setDoc(doc(db, 'users', uid, sub, id), {
-    ...data,
+  return withRetry(() => setDoc(doc(db, 'users', uid, sub, id), {
+    ...clean(data),
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
-  });
+  }));
 }
 
 export async function updateSubItem(
@@ -102,14 +148,14 @@ export async function updateSubItem(
   id: string,
   data: Record<string, any>
 ) {
-  await updateDoc(doc(db, 'users', uid, sub, id), {
-    ...data,
+  return withRetry(() => updateDoc(doc(db, 'users', uid, sub, id), {
+    ...clean(data),
     updatedAt: serverTimestamp(),
-  });
+  }));
 }
 
 export async function deleteSubItem(uid: string, sub: SubCollection, id: string) {
-  await deleteDoc(doc(db, 'users', uid, sub, id));
+  return withRetry(() => deleteDoc(doc(db, 'users', uid, sub, id)));
 }
 
 export async function getSubCollection(uid: string, sub: SubCollection): Promise<DocumentData[]> {
@@ -123,15 +169,23 @@ export async function bulkWriteSubCollection(
   sub: SubCollection,
   items: Array<{ id: string; [key: string]: any }>
 ) {
-  const batch = writeBatch(db);
-  for (const item of items) {
-    const { id, ...rest } = item;
-    batch.set(doc(db, 'users', uid, sub, id), {
-      ...rest,
-      updatedAt: serverTimestamp(),
+  // Firestore batches have a limit of 500 writes.
+  const BATCH_LIMIT = 500;
+  
+  for (let i = 0; i < items.length; i += BATCH_LIMIT) {
+    const chunk = items.slice(i, i + BATCH_LIMIT);
+    await withRetry(async () => {
+      const batch = writeBatch(db);
+      for (const item of chunk) {
+        const { id, ...rest } = item;
+        batch.set(doc(db, 'users', uid, sub, id), {
+          ...clean(rest),
+          updatedAt: serverTimestamp(),
+        });
+      }
+      await batch.commit();
     });
   }
-  await batch.commit();
 }
 
 /** Real-time listener for a sub-collection */
@@ -162,8 +216,8 @@ export function subscribeToPortfolio(
 }
 
 export async function triggerPortfolioRebuild(uid: string) {
-  await updateDoc(doc(db, 'portfolios', uid), {
+  return withRetry(() => setDoc(doc(db, 'portfolios', uid), {
     buildStatus: 'QUEUED',
     updatedAt: serverTimestamp(),
-  });
+  }, { merge: true }));
 }

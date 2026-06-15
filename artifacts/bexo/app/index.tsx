@@ -31,6 +31,8 @@ export default function RootIndex() {
     return () => clearTimeout(t);
   }, []);
 
+  const profile = useProfileStore((s) => s.profile);
+
   if (!ready) return <View style={{ flex: 1, backgroundColor: '#0F0F11' }} />;
 
   // ── No session at all → go to phone entry
@@ -43,12 +45,15 @@ export default function RootIndex() {
 
   // ── Both verified → check onboarding progress
   if (session.phoneVerified && session.emailVerified) {
+    // Wait for the profile to be synced from Firestore before making a routing decision
+    if (!profile) return <View style={{ flex: 1, backgroundColor: '#0F0F11' }} />;
+
     if (onboardingStep === 'completed' || isOnboardingGateComplete()) {
       return <Redirect href="/(main)/(tabs)/dashboard" />;
     }
-    const step = onboardingStep || 'photo'; // skip email step — email already verified via Google
+    const step = (!onboardingStep || onboardingStep === 'email') ? 'photo' : onboardingStep;
     const route = step === 'manual_review' ? 'manual-review' : step;
-    return <Redirect href={`/(onboarding)/${route}` as `/${string}`} />;
+    return <Redirect href={`/(onboarding)/${route}` as any} />;
   }
 
   return <Redirect href="/(auth)" />;

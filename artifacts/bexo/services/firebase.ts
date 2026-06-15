@@ -6,19 +6,21 @@
  */
 
 import { getApps, initializeApp } from 'firebase/app';
-import { getAuth, getReactNativePersistence, initializeAuth } from 'firebase/auth';
+import { getAuth, initializeAuth } from 'firebase/auth';
+// @ts-ignore
+import { getReactNativePersistence } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const firebaseConfig = {
-  apiKey: 'AIzaSyAjdoByKWrLxmdcUa6ceMBmKV1H_K5qgC0',
-  authDomain: 'mybexo.firebaseapp.com',
-  projectId: 'mybexo',
-  storageBucket: 'mybexo.firebasestorage.app',
-  messagingSenderId: '860803616355',
-  appId: '1:860803616355:web:80942687e61199197bb256',
-  measurementId: 'G-9DDFB9XBV8',
+  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY || 'AIzaSyAjdoByKWrLxmdcUa6ceMBmKV1H_K5qgC0',
+  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN || 'mybexo.firebaseapp.com',
+  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID || 'mybexo',
+  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET || 'mybexo.firebasestorage.app',
+  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || '860803616355',
+  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID || '1:860803616355:web:80942687e61199197bb256',
+  measurementId: process.env.EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID || 'G-9DDFB9XBV8',
 };
 
 // Avoid double-initialisation (important for Expo fast-refresh)

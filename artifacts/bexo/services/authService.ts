@@ -14,7 +14,6 @@ import {
   ApplicationVerifier,
   PhoneAuthProvider,
   signInWithCredential,
-  signInWithPhoneNumber,
   UserCredential,
 } from 'firebase/auth';
 import { auth } from './firebase';
@@ -29,7 +28,7 @@ export function resetRecaptcha() {
  */
 export async function sendPhoneOtp(
   phoneNumber: string,
-  verifier: ApplicationVerifier
+  verifier?: ApplicationVerifier
 ): Promise<{ verificationId: string | null; error: string | null }> {
   try {
     if (!verifier) {
@@ -64,7 +63,7 @@ export async function confirmPhoneOtp(
 }
 
 /** Maps Firebase error codes to human-readable messages. */
-function mapAuthError(code: string): string {
+export function mapAuthError(code: string): string {
   switch (code) {
     case 'auth/invalid-phone-number':
       return 'Invalid phone number. Use format +91XXXXXXXXXX.';

@@ -53,10 +53,10 @@ export default function PreferenceStep() {
           ))}
         </View>
         <View style={styles.footer}>
-          <BexoButton label="Build my portfolio" onPress={handleNext} />
-          {selected.length === 0 ? (
-            <BexoButton label="Skip" onPress={handleNext} variant="ghost" />
-          ) : null}
+          <BexoButton
+            label={selected.length > 0 ? 'Build my portfolio' : 'Continue'}
+            onPress={handleNext}
+          />
         </View>
       </ScrollView>
     </OnboardingShell>

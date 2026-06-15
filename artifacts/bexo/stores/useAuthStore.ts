@@ -14,6 +14,7 @@ import {
   GoogleAuthProvider,
   linkWithCredential,
   onAuthStateChanged,
+  onIdTokenChanged,
   signInWithCredential,
   signOut as firebaseSignOut,
   User,
@@ -22,8 +23,8 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
 import { auth } from '@/services/firebase';
-import { sendPhoneOtp, confirmPhoneOtp, resetRecaptcha } from '@/services/authService';
-import { upsertUser } from '@/services/firestoreService';
+import { sendPhoneOtp, confirmPhoneOtp, resetRecaptcha, mapAuthError } from '@/services/authService';
+import { upsertUser, getUserProfile } from '@/services/firestoreService';
 
 export type BexoSession = {
   user: {
@@ -45,17 +46,21 @@ type AuthStore = {
   otpSentAt: number | null;
   hasSeenWalkthrough: boolean;
 
+  collectedEmail: string;
+
   /** In-memory only — NOT persisted */
   _verificationId: string | null;
 
   // ── Setters ────────────────────────────────────────────────────────────────
   setPhoneNumber: (phone: string) => void;
+  setCollectedPhone: (phone: string) => void;
+  setCollectedEmail: (email: string) => void;
   setOtpSentAt: (ts: number | null) => void;
   getOtpRemainingSeconds: () => number;
   setHasSeenWalkthrough: (v: boolean) => void;
 
   // ── Step 1: Phone OTP ──────────────────────────────────────────────────────
-  sendOtp: (phone: string, verifier: any) => Promise<{ error: string | null }>;
+  sendOtp: (phone: string, verifier?: any) => Promise<{ error: string | null }>;
   verifyOtp: (phone: string, code: string) => Promise<{ error: string | null }>;
 
   // ── Step 2: Google OAuth (link to phone-auth user) ─────────────────────────
@@ -74,11 +79,14 @@ export const useAuthStore = create<AuthStore>()(
       session: null,
       isLoading: false,
       phoneNumber: '',
+      collectedEmail: '',
       otpSentAt: null,
       hasSeenWalkthrough: false,
       _verificationId: null,
 
       setPhoneNumber: (phoneNumber) => set({ phoneNumber }),
+      setCollectedPhone: (phone) => set({ phoneNumber: phone }),
+      setCollectedEmail: (email) => set({ collectedEmail: email }),
       setOtpSentAt: (otpSentAt) => set({ otpSentAt }),
       setHasSeenWalkthrough: (v) => set({ hasSeenWalkthrough: v }),
 
@@ -97,11 +105,10 @@ export const useAuthStore = create<AuthStore>()(
           set({ isLoading: false });
           return { error };
         }
-        if (!verificationId && !__DEV__) {
+        if (!verificationId) {
           set({ isLoading: false });
           return { error: 'Failed to send OTP. Please try again.' };
         }
-        // In DEV mode, verificationId might be null which is fine, we just fall back
         set({ isLoading: false, otpSentAt: Date.now(), _verificationId: verificationId });
         return { error: null };
       },
@@ -111,32 +118,10 @@ export const useAuthStore = create<AuthStore>()(
         set({ isLoading: true });
         const verificationId = get()._verificationId;
 
-        // ── DEV fallback (Expo Go / emulator, no real SMS) ──────────────────
+        const phone = get().phoneNumber;
         if (!verificationId) {
-          await new Promise((r) => setTimeout(r, 800));
-          const phone = get().phoneNumber;
-          const digits = phone.replace(/\D/g, '');
-          const valid =
-            code === '000000' ||
-            (digits.endsWith('9999999999') && (code === '001234' || code === '123456'));
-
-          if (!valid) {
-            set({ isLoading: false });
-            return { error: 'Wrong code. Use 0000 for any number.' };
-          }
-
-          const uid = 'dev-' + digits.slice(-6);
-          const session: BexoSession = {
-            user: { id: uid, phone, email: null, displayName: null, photoURL: null },
-            phoneVerified: true,
-            emailVerified: false,   // ← must still do Google step
-            access_token: 'dev_' + Date.now(),
-          };
-          set({ session, isLoading: false });
-
-          // Bootstrap Firestore
-          upsertUser(uid, { uid, phone, phoneVerified: true }).catch(console.warn);
-          return { error: null };
+          set({ isLoading: false });
+          return { error: 'Session expired. Please request a new code.' };
         }
 
         // ── Real Firebase Phone Auth ────────────────────────────────────────
@@ -147,6 +132,16 @@ export const useAuthStore = create<AuthStore>()(
         }
 
         const user = credential.user;
+        let profile = null;
+        try {
+          profile = await getUserProfile(user.uid);
+        } catch (err: any) {
+          console.warn('[AuthStore] getUserProfile failed after OTP:', err.message);
+        }
+        const emailVerified = profile?.googleLinked === true;
+
+        const token = await user.getIdToken();
+
         const session: BexoSession = {
           user: {
             id: user.uid,
@@ -156,8 +151,8 @@ export const useAuthStore = create<AuthStore>()(
             photoURL: user.photoURL,
           },
           phoneVerified: true,
-          emailVerified: false,   // ← must still do Google step
-          access_token: 'firebase_' + user.uid,
+          emailVerified: emailVerified,   // ← skip Google step if already linked
+          access_token: token,
         };
         set({ session, isLoading: false, _verificationId: null });
 
@@ -175,27 +170,7 @@ export const useAuthStore = create<AuthStore>()(
       linkGoogle: async (idToken, accessToken) => {
         set({ isLoading: true });
         const currentSession = get().session;
-
-        // ── DEV mode: fake Google link ────────────────────────────────────
-        if (__DEV__ && idToken.startsWith('dev-')) {
-          await new Promise((r) => setTimeout(r, 600));
-          const uid = currentSession?.user.id ?? 'dev-user';
-          const updatedSession: BexoSession = {
-            user: {
-              id: uid,
-              phone: currentSession?.user.phone ?? '',
-              email: 'dev@gmail.com',
-              displayName: 'Dev User',
-              photoURL: null,
-            },
-            phoneVerified: true,
-            emailVerified: true,
-            access_token: 'dev_google_' + Date.now(),
-          };
-          set({ session: updatedSession, isLoading: false });
-          upsertUser(uid, { email: 'dev@gmail.com', emailVerified: true, googleLinked: true }).catch(console.warn);
-          return { error: null };
-        }
+        // ── Real Firebase Google Link ─────────────────────────────────────
 
         try {
           const googleCredential = GoogleAuthProvider.credential(idToken, accessToken);
@@ -234,6 +209,12 @@ export const useAuthStore = create<AuthStore>()(
             }
           }
 
+          // Let's also fetch the latest token for backend calls
+          let token = 'firebase_' + uid;
+          if (firebaseUser || auth.currentUser) {
+            token = await (firebaseUser || auth.currentUser)!.getIdToken();
+          }
+
           const updatedSession: BexoSession = {
             user: {
               id: currentSession?.user.id ?? uid,
@@ -244,7 +225,7 @@ export const useAuthStore = create<AuthStore>()(
             },
             phoneVerified: true,
             emailVerified: true,   // ← Google verified = email verified
-            access_token: 'firebase_' + uid,
+            access_token: token,
           };
           set({ session: updatedSession, isLoading: false });
 
@@ -273,6 +254,14 @@ export const useAuthStore = create<AuthStore>()(
       signOut: async () => {
         await firebaseSignOut(auth).catch(console.warn);
         resetRecaptcha();
+        try {
+          const { useProfileStore } = require('./useProfileStore');
+          const { usePortfolioStore } = require('./usePortfolioStore');
+          useProfileStore.getState().reset();
+          usePortfolioStore.getState().reset();
+        } catch (e) {
+          console.warn('Failed to reset stores on signout:', e);
+        }
         set({ session: null, _verificationId: null, phoneNumber: '', otpSentAt: null });
       },
 
@@ -282,6 +271,14 @@ export const useAuthStore = create<AuthStore>()(
           // If we have a DEV session, don't wipe it just because Firebase is empty
           if (prev?.user.id.startsWith('dev-')) return;
           // Otherwise, Firebase says we're logged out
+          try {
+            const { useProfileStore } = require('./useProfileStore');
+            const { usePortfolioStore } = require('./usePortfolioStore');
+            useProfileStore.getState().reset();
+            usePortfolioStore.getState().reset();
+          } catch (e) {
+            console.warn('Failed to reset stores on auth state change:', e);
+          }
           set({ session: null });
           return;
         }
@@ -304,7 +301,7 @@ export const useAuthStore = create<AuthStore>()(
     {
       name: 'bexo-auth-v4',
       storage: createJSONStorage(() => AsyncStorage),
-      partialize: ({ _verificationId, ...rest }) => rest,
+      partialize: ({ _verificationId, isLoading, ...rest }) => rest,
     }
   )
 );
@@ -312,4 +309,17 @@ export const useAuthStore = create<AuthStore>()(
 // Attach Firebase auth state listener
 onAuthStateChanged(auth, (user) => {
   useAuthStore.getState()._syncUser(user);
+});
+
+// Attach Firebase token refresh listener
+onIdTokenChanged(auth, async (user) => {
+  if (user) {
+    const token = await user.getIdToken();
+    const prev = useAuthStore.getState().session;
+    if (prev && prev.access_token !== token) {
+      useAuthStore.setState({
+        session: { ...prev, access_token: token },
+      });
+    }
+  }
 });
